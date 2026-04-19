@@ -1,0 +1,16 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Shared AWS infrastructure for the cloud-monorepo — deployed once per
+  environment (dev / prod). Holds cross-platform resources: shared S3
+  bucket(s), shared DynamoDB tables, SES configuration, IAM role patterns,
+  and CloudWatch dashboards. Exports ARNs that platform stacks
+  (platforms/{platform}/template.yaml) consume via Fn::ImportValue.
+
+# Placeholder. Populated alongside the Amazon first milestone.
+
+Resources:
+  # TODO
+
+Outputs:
+  # TODO — export shared ARNs here for platform stacks to import.

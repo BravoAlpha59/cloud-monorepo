@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Amazon SP-API platform stack — deployed per environment. Contains only
+  Lambdas, SQS queues + DLQs, and EventBridge rules for the Amazon
+  integration. Shared resources (S3, DynamoDB, SES, IAM patterns) come from
+  the base stack (infrastructure/base-stack.yaml) via Fn::ImportValue.
+
+# Placeholder. Populated as the first milestone is implemented:
+# EventBridge → ReportRequester Lambda → createReport → S3 for Sincerely Hers.
+
+Resources:
+  # TODO
