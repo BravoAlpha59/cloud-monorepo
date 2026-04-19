@@ -1,0 +1,15 @@
+[project]
+name = "cloud-monorepo"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "shared",
+    "platforms/amazon",
+    "platforms/walmart",
+    "platforms/shopify",
+    "platforms/target",
+    "platforms/faire",
+]
