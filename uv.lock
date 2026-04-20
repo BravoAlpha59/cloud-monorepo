@@ -1,0 +1,49 @@
+version = 1
+revision = 3
+requires-python = ">=3.14"
+
+[manifest]
+members = [
+    "cloud-monorepo",
+    "sincerelyhers-amazon",
+    "sincerelyhers-faire",
+    "sincerelyhers-shared",
+    "sincerelyhers-shopify",
+    "sincerelyhers-target",
+    "sincerelyhers-walmart",
+]
+
+[[package]]
+name = "cloud-monorepo"
+version = "0.1.0"
+source = { virtual = "." }
+
+[[package]]
+name = "sincerelyhers-amazon"
+version = "0.1.0"
+source = { editable = "platforms/amazon" }
+
+[[package]]
+name = "sincerelyhers-faire"
+version = "0.1.0"
+source = { editable = "platforms/faire" }
+
+[[package]]
+name = "sincerelyhers-shared"
+version = "0.1.0"
+source = { editable = "shared" }
+
+[[package]]
+name = "sincerelyhers-shopify"
+version = "0.1.0"
+source = { editable = "platforms/shopify" }
+
+[[package]]
+name = "sincerelyhers-target"
+version = "0.1.0"
+source = { editable = "platforms/target" }
+
+[[package]]
+name = "sincerelyhers-walmart"
+version = "0.1.0"
+source = { editable = "platforms/walmart" }
