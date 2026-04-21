@@ -30,9 +30,9 @@ deploy-base-prod:
 
 # ---- Amazon platform stack ----
 build-amazon:
-	uv export --frozen --no-dev --package sincerelyhers-amazon \
+	uv export --frozen --no-dev --no-emit-workspace --package sincerelyhers-amazon \
 		--output-file platforms/amazon/src/requirements.txt
-	sam build --template platforms/amazon/template.yaml
+	sam build --template platforms/amazon/template.yaml --use-container
 
 deploy-amazon-dev: build-amazon
 	sam deploy --template platforms/amazon/template.yaml \
