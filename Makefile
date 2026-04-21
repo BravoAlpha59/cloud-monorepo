@@ -35,7 +35,7 @@ build-amazon:
 	sam build --template platforms/amazon/template.yaml --use-container
 
 deploy-amazon-dev: build-amazon
-	sam deploy --template platforms/amazon/template.yaml \
+	sam deploy --template .aws-sam/build/template.yaml \
 		--stack-name sincerelyhers-amazon-dev \
 		--profile sincerelyhers-dev \
 		--region us-east-2 \
@@ -51,7 +51,7 @@ deploy-amazon-prod: build-amazon
 	@echo "  Role:    arn:aws:iam::637445353164:role/DeploymentRole"
 	@echo ""
 	@bash -c 'read -p "Type '\''deploy prod'\'' to continue: " confirm && [ "$$confirm" = "deploy prod" ] || (echo "Aborted." && exit 1)'
-	sam deploy --template platforms/amazon/template.yaml \
+	sam deploy --template .aws-sam/build/template.yaml \
 		--stack-name sincerelyhers-amazon-prod \
 		--profile sincerelyhers-prod \
 		--role-arn arn:aws:iam::637445353164:role/DeploymentRole \
