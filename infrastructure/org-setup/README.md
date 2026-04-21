@@ -34,9 +34,18 @@ Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../doc
 
 After Phase 7, day-to-day access is via `aws configure sso` using the Identity Center portal URL. No root logins needed thereafter.
 
-## To be added here once applied
+## SCP definitions (drafts — not yet attached)
 
-- **SCP JSON definitions** (final versions as applied): `scp-region-lockdown.json`, `scp-protect-cloudtrail.json`, `scp-protect-production-secrets.json`.
+Ready to paste into the Organizations console during Phase 6. Re-save the final applied version here if anything is edited at attach time.
+
+- [`scp-region-lockdown.json`](scp-region-lockdown.json) — attach to `sincerelyhers-internal` OU (`ou-b2n7-hyxkrhhl`). Denies every action whose `aws:RequestedRegion` is not `us-east-2` or `us-east-1`, except for callers assuming `OrganizationAccountAccessRole` (so the bootstrap cross-account role is never locked out).
+- [`scp-protect-cloudtrail.json`](scp-protect-cloudtrail.json) — attach to `sincerelyhers-internal` OU. Denies `cloudtrail:StopLogging`, `DeleteTrail`, `UpdateTrail` for every principal, including admins.
+- [`scp-protect-production-secrets.json`](scp-protect-production-secrets.json) — attach to the `sincerelyhers` prod account only (`637445353164`). Denies Secrets Manager writes on `sp-api/*` except when the caller is `arn:aws:iam::637445353164:role/DeploymentRole`.
+
+When attaching in the console, leave the default `FullAWSAccess` policy attached alongside these — SCPs are deny-only, and removing `FullAWSAccess` turns the attachment into an allowlist (which is not what we want).
+
+## Still to be added here
+
 - **Identity Center permission-set templates** (IaC form if pursued).
-- **DeploymentRole** trust policy and permissions (the role assumed during `sam deploy` that owns writes to prod Secrets Manager).
+- **DeploymentRole** trust policy and permissions (the role assumed during `sam deploy` that owns writes to prod Secrets Manager). Must exist before `ProtectProductionSecrets` is attached in prod, or the SCP will block every principal including yourself.
 - **OrganizationAccountAccessRole** trust-policy reference for the record.
