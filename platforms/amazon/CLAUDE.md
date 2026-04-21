@@ -41,4 +41,10 @@ These are final. Do not re-open them.
 
 ## First Milestone
 
-Stand up the SAM project skeleton and a single `createReport` → S3 path for Sincerely Hers, driven by an EventBridge rule in the dev account. Downstream pieces (DynamoDB job tracking, SES delivery, per-queue DLQs, additional sellers) come after that round-trip works end to end.
+**Complete (2026-04-21).** EventBridge cron → `ReportRequester` Lambda → SP-API `createReport` → DynamoDB (`REQUESTED`); then SP-API `REPORT_PROCESSING_FINISHED` → SQS (`sp-api-report-ready`, DLQ 3× redrive) → `ReportProcessor` Lambda → SP-API `getReportDocument` + download + gunzip → S3 (`sincerelyhers-reports-dev/amazon/sincerely-services/SH/.../{reportId}.tsv`) → DynamoDB `COMPLETED`. First full round-trip verified against dev on 2026-04-21 in 39 seconds end-to-end (requested 23:09:51 → completed 23:10:30, 6.2 MB TSV written to S3).
+
+Out of scope for this milestone and still pending:
+
+- SES delivery of a 7-day pre-signed URL. Optional per-rule; wire it when the first recipient list is known.
+- Onboard sellers **KK**, **LLG**, **73J**, **OH** to the Sincerely Services SPP app; store each refresh_token at `sp-api/sincerely-services/{alias}/credentials`; add per-seller EventBridge schedule rules to `template.yaml`; and run `scripts/sp_api_notifications.py create-subscription {alias} {destinationId}` for each. Destination can be reused across sellers.
+- Prod base and platform stacks (dev exercised first).
