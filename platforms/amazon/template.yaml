@@ -1,13 +1,116 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Amazon SP-API platform stack — deployed per environment. Contains only
-  Lambdas, SQS queues + DLQs, and EventBridge rules for the Amazon
-  integration. Shared resources (S3, DynamoDB, SES, IAM patterns) come from
-  the base stack (infrastructure/base-stack.yaml) via Fn::ImportValue.
+  Amazon SP-API platform stack (Pass 1) — ReportRequester Lambda,
+  DynamoDB job-tracking table, and EventBridge schedule rule for
+  Sincerely Hers.
 
-# Placeholder. Populated as the first milestone is implemented:
-# EventBridge → ReportRequester Lambda → createReport → S3 for Sincerely Hers.
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  SecretsPrefix:
+    Type: String
+    Default: sp-api/sincerely-services
+
+Globals:
+  Function:
+    Runtime: python3.14
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
 
 Resources:
-  # TODO
+  # ---- DynamoDB ----
+  AmazonReportJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${Environment}-amazon-report-jobs"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: report_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: report_id
+          KeyType: HASH
+
+  # ---- IAM ----
+  ReportRequesterExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-ReportRequesterRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/*"
+        - PolicyName: DynamoDBWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt AmazonReportJobsTable.Arn
+
+  # ---- Lambda ----
+  ReportRequesterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-ReportRequester"
+      CodeUri: src/
+      Handler: handlers.report_requester.lambda_handler
+      Role: !GetAtt ReportRequesterExecutionRole.Arn
+      Environment:
+        Variables:
+          REPORT_JOBS_TABLE: !Ref AmazonReportJobsTable
+          SECRETS_PREFIX: !Ref SecretsPrefix
+
+  # ---- EventBridge ----
+  SincerelyhersReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-sincerelyhers-daily-report"
+      Description: "Daily open-listings report for Sincerely Hers"
+      ScheduleExpression: "cron(0 8 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "sincerely-hers",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
+              "lookback_days": 1
+            }
+
+  ReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SincerelyhersReportScheduleRule.Arn
+
+Outputs:
+  ReportRequesterFunctionArn:
+    Description: ARN of the ReportRequester Lambda
+    Value: !GetAtt ReportRequesterFunction.Arn
+  ReportJobsTableName:
+    Description: Name of the DynamoDB report-jobs table
+    Value: !Ref AmazonReportJobsTable

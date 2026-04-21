@@ -13,3 +13,11 @@ members = [
     "platforms/target",
     "platforms/faire",
 ]
+
+[dependency-groups]
+dev = [
+    "moto[dynamodb,secretsmanager]>=5.1.22",
+    "pytest>=9.0.3",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.11",
+]
