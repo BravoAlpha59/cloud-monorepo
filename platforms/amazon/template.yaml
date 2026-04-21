@@ -58,6 +58,21 @@ Resources:
         deadLetterTargetArn: !GetAtt ReportReadyDLQ.Arn
         maxReceiveCount: 3
 
+  ReportReadyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ReportReadyQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSPAPINotifications
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::437568002678:root"
+            Action: sqs:SendMessage
+            Resource: !GetAtt ReportReadyQueue.Arn
+
   # ---- IAM: ReportRequester ----
   ReportRequesterExecutionRole:
     Type: AWS::IAM::Role

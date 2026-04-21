@@ -77,9 +77,16 @@ Adding a report type or seller is a template change plus a new rule — no handl
 - Writes `AmazonReportJobs` row with `status = REQUESTED`.
 - Typical runtime <2s. Memory 256 MB, timeout 30s.
 
-#### SP-API Notifications (one-time bootstrap per seller)
+#### SP-API Notifications (one-time bootstrap)
 
-`createDestination` → SQS queue ARN, then `createSubscription` for `REPORT_PROCESSING_FINISHED`. Bootstrapped via a SAM custom resource or one-shot script — not a runtime step.
+Two API calls, each one-shot:
+
+1. `createDestination` — once per SPP app × AWS region × SQS queue. Registers the queue ARN as a delivery target for the app. Grantless call; uses only the app's LWA `client_id` + `client_secret`. Returns a `destinationId` that survives for the life of the app.
+2. `createSubscription` — once per seller × notification type. Subscribes the seller's events (currently `REPORT_PROCESSING_FINISHED`) to the destination. Uses the seller's refresh-token creds.
+
+Driven by [scripts/sp_api_notifications.py](scripts/sp_api_notifications.py), a stand-alone CLI (not a runtime component): `list-destinations`, `create-destination <name> <queue-arn>`, `show-subscription <seller> [<type>]`, `create-subscription <seller> <destination-id> [<type>]`. Credentials are pulled from the same Secrets Manager path the Lambdas use (`sp-api/sincerely-services/<alias>/credentials`).
+
+SP-API can only write to the queue if the queue's resource policy grants `sqs:SendMessage` to the SP-API notifications service principal (`arn:aws:iam::437568002678:root`). This is baked into `platforms/amazon/template.yaml` as `ReportReadyQueuePolicy` and applied on every stack deploy.
 
 #### SQS: sp-api-report-ready
 
