@@ -1,0 +1,117 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadStackServices",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:Get*",
+        "lambda:List*",
+        "dynamodb:BatchGet*",
+        "dynamodb:ConditionCheckItem",
+        "dynamodb:Describe*",
+        "dynamodb:Get*",
+        "dynamodb:List*",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "sqs:Get*",
+        "sqs:List*",
+        "sqs:ReceiveMessage",
+        "events:Describe*",
+        "events:List*",
+        "events:TestEventPattern",
+        "s3:Get*",
+        "s3:List*",
+        "ses:Get*",
+        "ses:List*",
+        "ses:Describe*",
+        "secretsmanager:ListSecrets",
+        "secretsmanager:DescribeSecret",
+        "cloudformation:Describe*",
+        "cloudformation:Get*",
+        "cloudformation:List*",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:EstimateTemplateCost",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadIAM",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*",
+        "iam:SimulatePrincipalPolicy",
+        "iam:SimulateCustomPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogsReadAndQuery",
+      "Effect": "Allow",
+      "Action": [
+        "logs:Describe*",
+        "logs:Get*",
+        "logs:Filter*",
+        "logs:List*",
+        "logs:StartQuery",
+        "logs:StopQuery",
+        "logs:StartLiveTail",
+        "logs:StopLiveTail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "InvokeLambdaForManualTesting",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "*"
+    },
+    {
+      "Sid": "SamDeployStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:ContinueUpdateRollback",
+        "cloudformation:CancelUpdateStack"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SamPackageBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:AbortMultipartUpload",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketTagging",
+        "s3:PutEncryptionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
+      ]
+    },
+    {
+      "Sid": "PassDeploymentRoleToCloudFormation",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::637445353164:role/DeploymentRole",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "cloudformation.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

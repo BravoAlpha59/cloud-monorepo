@@ -79,7 +79,56 @@ When attaching in the console, leave the default `FullAWSAccess` policy attached
 
 Deploying the same template in dev (`431412299701`) is optional but recommended for consistency — the `ProtectProductionSecrets` SCP does not apply there, so dev also works without a service role, but keeping the `sam deploy` invocation shape identical across envs avoids foot-guns.
 
+## Identity Center permission sets (Phase 7)
+
+Three permission sets will be created in IAM Identity Center and assigned per the plan:
+
+| Permission set | Source | Assigned to |
+|---|---|---|
+| `AdministratorAccess` | AWS managed | `sincerelyhers-dev` |
+| `DeveloperAccess` | Custom — [`permission-set-developer-access.json`](permission-set-developer-access.json) | `sincerelyhers` (prod) |
+| `ReadOnlyAccess` | AWS managed | `sincerelyhers-management` |
+
+### DeveloperAccess design notes
+
+The custom policy is intentionally lean. What it grants:
+
+- **Read-only** on every service our SAM stacks touch (Lambda, DynamoDB, SQS, EventBridge, S3, SES, Secrets Manager metadata, CloudFormation, IAM, STS) plus CloudWatch Logs with query/live-tail capability for debugging.
+- **`lambda:InvokeFunction`** on any Lambda — lets the developer manually trigger functions for smoke-testing without needing EventBridge.
+- **`cloudformation:*Stack*` / `*ChangeSet*`** so `sam deploy` works.
+- **`s3:*` scoped to `aws-sam-cli-managed-*`** — enough for SAM's deployment bucket (created on first `sam deploy --resolve-s3`) without granting bucket access elsewhere.
+- **`iam:PassRole`** narrowed to `arn:aws:iam::637445353164:role/DeploymentRole` *and* `iam:PassedToService = cloudformation.amazonaws.com` — the developer can hand DeploymentRole to CFN during deploy but cannot pass it to any other service (e.g., cannot assume-role-via-Lambda).
+
+What it deliberately **does not** grant:
+
+- `secretsmanager:GetSecretValue` — prod secret values cannot be read by humans. Retrieval goes through Lambda execution roles or DeploymentRole writes only.
+- Any `Put`/`Update`/`Delete` on the data plane of Lambda / DynamoDB / SQS / EventBridge in prod. If you need to write prod state, do it via `sam deploy`. Emergency hotfix path is undefined on purpose — escalate to console + rarrington (still available) until we decide we need one.
+- IAM writes of any kind. Role changes go via CFN + DeploymentRole.
+- Any permissions on services outside our architecture. This policy does not pretend to protect EC2, RDS, etc. — it simply omits them, so inherited `FullAWSAccess` from the account plus the `RegionLockdown` SCP govern there.
+
+Size: 2966 bytes, well under the 10240-byte Identity Center inline-policy limit.
+
+### Phase 7 execution steps
+
+From the `sincerelyhers-management` account:
+
+1. **IAM Identity Center → Enable** (choose "Enable in the management account"; region **`us-east-2`** — matches `RegionLockdown`).
+2. **Users → Add user** — your canonical email. Accept the email invitation to set password + MFA.
+3. **Permission sets → Create permission set**, three times:
+   - `AdministratorAccess` → select the AWS-managed policy.
+   - `ReadOnlyAccess` → select the AWS-managed policy.
+   - `DeveloperAccess` → custom → **Inline policy** → paste the contents of `permission-set-developer-access.json`.
+4. **AWS accounts** (the org tree in Identity Center):
+   - `sincerelyhers-management` → assign your user → `ReadOnlyAccess`.
+   - `sincerelyhers` (prod) → assign your user → `DeveloperAccess`.
+   - `sincerelyhers-dev` → assign your user → `AdministratorAccess`.
+5. **Settings → Access portal URL** — capture the `https://d-xxxxxxxxxx.awsapps.com/start` URL. Bookmark it; it's the single sign-in point from now on.
+6. On WSL2: run `aws configure sso` twice to create named profiles:
+   - `sincerelyhers-prod` (account `637445353164`, role `DeveloperAccess`)
+   - `sincerelyhers-dev` (account `431412299701`, role `AdministratorAccess`)
+
+After step 6, `sam deploy --profile sincerelyhers-prod --role-arn arn:aws:iam::637445353164:role/DeploymentRole ...` should work end to end and rarrington CLI use ends.
+
 ## Still to be added here
 
-- **Identity Center permission-set templates** (IaC form if pursued).
 - **OrganizationAccountAccessRole** trust-policy reference for the record.
