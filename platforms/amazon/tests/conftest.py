@@ -10,6 +10,8 @@ from moto import mock_aws
 SELLER_ALIAS = "sincerely-hers"
 SECRETS_PREFIX = "sp-api/sincerely-services"
 TABLE_NAME = "test-amazon-report-jobs"
+BUCKET_NAME = "test-sincerelyhers-reports-dev"
+REGION = "us-east-2"
 
 SECRET_PAYLOAD = {
     "client_id": "amzn1.application-oa2-client.test",
@@ -25,17 +27,17 @@ def _aws_env(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-2")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", REGION)
     monkeypatch.setenv("REPORT_JOBS_TABLE", TABLE_NAME)
     monkeypatch.setenv("SECRETS_PREFIX", SECRETS_PREFIX)
+    monkeypatch.setenv("REPORTS_BUCKET", BUCKET_NAME)
 
 
 @pytest.fixture()
-def aws(monkeypatch):
-    """Yield a moto-mocked AWS session with DynamoDB table + secret pre-seeded."""
+def aws():
+    """Yield a moto-mocked AWS session with table, secret, and bucket pre-seeded."""
     with mock_aws():
-        # DynamoDB table
-        ddb = boto3.resource("dynamodb", region_name="us-east-2")
+        ddb = boto3.resource("dynamodb", region_name=REGION)
         ddb.create_table(
             TableName=TABLE_NAME,
             KeySchema=[{"AttributeName": "report_id", "KeyType": "HASH"}],
@@ -43,11 +45,16 @@ def aws(monkeypatch):
             BillingMode="PAY_PER_REQUEST",
         )
 
-        # Secrets Manager secret
-        sm = boto3.client("secretsmanager", region_name="us-east-2")
+        sm = boto3.client("secretsmanager", region_name=REGION)
         sm.create_secret(
             Name=f"{SECRETS_PREFIX}/{SELLER_ALIAS}/credentials",
             SecretString=json.dumps(SECRET_PAYLOAD),
+        )
+
+        s3 = boto3.client("s3", region_name=REGION)
+        s3.create_bucket(
+            Bucket=BUCKET_NAME,
+            CreateBucketConfiguration={"LocationConstraint": REGION},
         )
 
         yield

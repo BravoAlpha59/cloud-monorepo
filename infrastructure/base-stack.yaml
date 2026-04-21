@@ -2,15 +2,48 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
   Shared AWS infrastructure for the cloud-monorepo — deployed once per
-  environment (dev / prod). Holds cross-platform resources: shared S3
-  bucket(s), shared DynamoDB tables, SES configuration, IAM role patterns,
-  and CloudWatch dashboards. Exports ARNs that platform stacks
-  (platforms/{platform}/template.yaml) consume via Fn::ImportValue.
+  environment (dev / prod). Currently holds the cross-platform reports
+  bucket that platform stacks import. SES sender identity and shared
+  CloudWatch dashboards land here in later passes.
 
-# Placeholder. Populated alongside the Amazon first milestone.
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
 
 Resources:
-  # TODO
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sincerelyhers-reports-${Environment}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: TransitionOlderObjects
+            Status: Enabled
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+              - StorageClass: GLACIER
+                TransitionInDays: 90
 
 Outputs:
-  # TODO — export shared ARNs here for platform stacks to import.
+  ReportsBucketArn:
+    Description: ARN of the cross-platform reports bucket.
+    Value: !GetAtt ReportsBucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ReportsBucketArn"
+  ReportsBucketName:
+    Description: Name of the cross-platform reports bucket.
+    Value: !Ref ReportsBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-ReportsBucketName"

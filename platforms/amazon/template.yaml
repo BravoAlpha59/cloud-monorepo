@@ -1,9 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Amazon SP-API platform stack (Pass 1) — ReportRequester Lambda,
-  DynamoDB job-tracking table, and EventBridge schedule rule for
-  Sincerely Hers.
+  Amazon SP-API platform stack — ReportRequester (EventBridge-triggered)
+  and ReportProcessor (SQS-triggered) Lambdas, DynamoDB job-tracking
+  table, and the sp-api-report-ready SQS queue with its DLQ. Imports
+  the shared reports bucket from the base stack.
 
 Parameters:
   Environment:
@@ -13,6 +14,10 @@ Parameters:
   SecretsPrefix:
     Type: String
     Default: sp-api/sincerely-services
+  BaseStackName:
+    Type: String
+    Default: sincerelyhers-base-dev
+    Description: Name of the cross-environment base stack whose exports we import.
 
 Globals:
   Function:
@@ -35,7 +40,25 @@ Resources:
         - AttributeName: report_id
           KeyType: HASH
 
-  # ---- IAM ----
+  # ---- SQS ----
+  ReportReadyDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-report-ready-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      SqsManagedSseEnabled: true
+
+  ReportReadyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-report-ready"
+      VisibilityTimeout: 300  # 5 min — must exceed ReportProcessor Timeout
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ReportReadyDLQ.Arn
+        maxReceiveCount: 3
+
+  # ---- IAM: ReportRequester ----
   ReportRequesterExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -67,7 +90,61 @@ Resources:
                   - dynamodb:UpdateItem
                 Resource: !GetAtt AmazonReportJobsTable.Arn
 
-  # ---- Lambda ----
+  # ---- IAM: ReportProcessor ----
+  ReportProcessorExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-ReportProcessorRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/*"
+        - PolicyName: SqsConsume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ReportReadyQueue.Arn
+        - PolicyName: S3Write
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource:
+                  Fn::Sub:
+                    - "${BucketArn}/amazon/*"
+                    - BucketArn:
+                        Fn::ImportValue: !Sub "${BaseStackName}-ReportsBucketArn"
+        - PolicyName: DynamoDBReadWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt AmazonReportJobsTable.Arn
+
+  # ---- Lambda: ReportRequester ----
   ReportRequesterFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -79,6 +156,29 @@ Resources:
         Variables:
           REPORT_JOBS_TABLE: !Ref AmazonReportJobsTable
           SECRETS_PREFIX: !Ref SecretsPrefix
+
+  # ---- Lambda: ReportProcessor ----
+  ReportProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-ReportProcessor"
+      CodeUri: src/
+      Handler: handlers.report_processor.lambda_handler
+      Role: !GetAtt ReportProcessorExecutionRole.Arn
+      Timeout: 240  # 4 min; SQS visibility of 5 min leaves a 1-min safety margin
+      MemorySize: 512
+      Environment:
+        Variables:
+          REPORT_JOBS_TABLE: !Ref AmazonReportJobsTable
+          SECRETS_PREFIX: !Ref SecretsPrefix
+          REPORTS_BUCKET:
+            Fn::ImportValue: !Sub "${BaseStackName}-ReportsBucketName"
+      Events:
+        ReportReady:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ReportReadyQueue.Arn
+            BatchSize: 1
 
   # ---- EventBridge ----
   SincerelyhersReportScheduleRule:
@@ -111,6 +211,15 @@ Outputs:
   ReportRequesterFunctionArn:
     Description: ARN of the ReportRequester Lambda
     Value: !GetAtt ReportRequesterFunction.Arn
+  ReportProcessorFunctionArn:
+    Description: ARN of the ReportProcessor Lambda
+    Value: !GetAtt ReportProcessorFunction.Arn
+  ReportReadyQueueArn:
+    Description: ARN of the sp-api-report-ready queue (subscribe SP-API notifications here).
+    Value: !GetAtt ReportReadyQueue.Arn
+  ReportReadyDLQArn:
+    Description: ARN of the DLQ for sp-api-report-ready.
+    Value: !GetAtt ReportReadyDLQ.Arn
   ReportJobsTableName:
     Description: Name of the DynamoDB report-jobs table
     Value: !Ref AmazonReportJobsTable
