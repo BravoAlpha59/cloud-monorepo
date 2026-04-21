@@ -23,11 +23,11 @@ These are final. Do not re-open them or suggest alternatives.
 - **IaC**: AWS SAM (CloudFormation underneath). Two-level stack pattern — see "IaC Layout" below.
 - **AWS SDK**: `boto3`.
 - **Region**: `us-east-2` for all resources. `us-east-1` is also permitted for global services that route through it (IAM, STS, CloudFront).
-- **Accounts**: three-account model under AWS Organizations
-  - Management account (owns the org, billing, SCPs — no workloads). Account ID: TODO.
-  - Prod: `sincerelyhers` (`637445353164`) — in `sincerelyhers-internal` OU.
-  - Dev: `sincerelyhers-dev` (to be created fresh) — in `sincerelyhers-internal` OU. Account ID: TODO.
-  - `sincerelyhers-saas` OU is reserved for the future SincerelySaaS public app.
+- **Accounts**: three-account model under AWS Organizations (Root `r-b2n7`)
+  - Management: `sincerelyhers-management` (`504804196123`) — owns the org, billing, SCPs; no workloads. At Root.
+  - Prod: `sincerelyhers` (`637445353164`) — in `sincerelyhers-internal` OU (`ou-b2n7-hyxkrhhl`).
+  - Dev: `sincerelyhers-dev` (`431412299701`) — in `sincerelyhers-internal` OU.
+  - `sincerelyhers-saas` OU (`ou-b2n7-1t37srxw`) is reserved for the future SincerelySaaS public app.
 - **Access model**: AWS IAM Identity Center (SSO). `aws configure sso` with named profiles `sincerelyhers-prod` and `sincerelyhers-dev`. No new long-lived IAM users in member accounts; existing `rarrington` user is historical and targeted for deprecation once Identity Center is fully stood up.
 - **Prod write protection**: a `DeploymentRole` (assumed by CloudFormation during `sam deploy`) is the only principal allowed to write production Secrets Manager values under `sp-api/*`. Enforced via SCP — see below.
 - **Secrets**: AWS Secrets Manager only. No env-var or file-based credentials. Naming includes the SPP app context — see "SP-API App Isolation".
@@ -37,11 +37,11 @@ These are final. Do not re-open them or suggest alternatives.
 
 ## AWS Account Context
 
-- **Organization layout**: management / `sincerelyhers-internal` OU (prod + dev) / `sincerelyhers-saas` OU (future).
+- **Organization layout**: Root `r-b2n7` → `sincerelyhers-management` (at Root) / `sincerelyhers-internal` OU `ou-b2n7-hyxkrhhl` (prod + dev) / `sincerelyhers-saas` OU `ou-b2n7-1t37srxw` (future).
 - **Region**: `us-east-2` (with `us-east-1` carve-out for global services).
 - **Prod**: `sincerelyhers` — account ID `637445353164`.
-- **Dev**: `sincerelyhers-dev` — account ID TODO.
-- **Management**: account ID TODO.
+- **Dev**: `sincerelyhers-dev` — account ID `431412299701`.
+- **Management**: `sincerelyhers-management` — account ID `504804196123`.
 - **Access**: AWS IAM Identity Center; profiles `sincerelyhers-prod` and `sincerelyhers-dev` via `aws configure sso`.
 - **Historical IAM user**: `rarrington` in the prod account. Still present while Identity Center is being stood up; destination state is Identity Center only.
 - **Secrets Manager naming**: platform-specific; see each platform's CLAUDE.md. Amazon uses `sp-api/sincerely-services/{seller-alias}/credentials`.
@@ -126,5 +126,6 @@ Clean slate — implementation just starting. Amazon is the first platform; see 
 
 ## Pending TODOs
 
-- **Assess AWS Organization setup once applied externally.** User will execute Phases 1–9 of [docs/chat-summaries/08-Organization Setup](docs/chat-summaries/08-Organization%20Setup/08-Organization%20Setup.md) in the AWS console (management account creation, OU structure, SCP application, IAM Identity Center, CloudTrail). When complete, verify: management/dev account IDs, Identity Center profile names, SCP attachments, DeploymentRole trust policy and permissions. Update this file, [infrastructure/org-setup/](infrastructure/org-setup/), and [platforms/amazon/CLAUDE.md](platforms/amazon/CLAUDE.md) with the applied values.
-- **Fill identifier TODOs** — management account ID, dev account ID, and the Amazon platform's TODOs (app name, LWA Client ID, sellers 2–4 aliases) once decided.
+- **Complete AWS Organization setup.** Phases 1–5 of [docs/chat-summaries/08-Organization Setup](docs/chat-summaries/08-Organization%20Setup/08-Organization%20Setup.md) are done (management account, Organizations all-features, OUs, prod invited, dev created, both accounts in `sincerelyhers-internal`). Still pending: Phase 6 (attach SCPs — `RegionLockdown` + `ProtectCloudTrail` to `sincerelyhers-internal`, `ProtectProductionSecrets` to prod), Phase 7 (IAM Identity Center + permission sets + account assignments), Phase 8 (IAM billing access per root), Phase 9 (CloudTrail all-regions per member). After Phase 7, capture Identity Center portal URL and run `aws configure sso` for profiles `sincerelyhers-prod` and `sincerelyhers-dev` on this machine.
+- **Add DeploymentRole.** Needed before any prod `sam deploy` (ProtectProductionSecrets SCP will otherwise deny Secrets Manager writes). Trust policy + permissions land in [infrastructure/org-setup/](infrastructure/org-setup/).
+- **Amazon platform identifier TODOs** — app name, LWA Client ID, and sellers 2–4 aliases once decided.

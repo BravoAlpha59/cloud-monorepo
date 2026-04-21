@@ -4,21 +4,30 @@ AWS Organizations, OU structure, SCPs, IAM Identity Center, and CloudTrail setup
 
 Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../docs/chat-summaries/08-Organization%20Setup/08-Organization%20Setup.md).
 
-## Status: not yet applied
+## Status: partially applied (Phases 1–5 done)
 
-The Organization, OUs, SCPs, Identity Center, and CloudTrail are planned but not yet configured in AWS. The user is completing Phases 1–9 externally in the AWS console (root login is required at several steps).
+### Applied
+
+- **Root**: `r-b2n7`
+- **Management**: `sincerelyhers-management` — `504804196123` (aws-mgmt@sincerelyhers.com)
+- **OUs**:
+  - `sincerelyhers-internal` — `ou-b2n7-hyxkrhhl`
+  - `sincerelyhers-saas` — `ou-b2n7-1t37srxw` (empty; reserved)
+- **Member accounts, both in `sincerelyhers-internal`**:
+  - `sincerelyhers` — `637445353164` (rarrington@sincerelyhers.com) — PROD, joined 2026/04/17
+  - `sincerelyhers-dev` — `431412299701` (aws-dev@sincerelyhers.com) — DEV, created 2026/04/21
 
 ### Phases to execute
 
-1. Create the management account (new root email).
-2. Enable AWS Organizations — **all features** mode (required for SCPs).
-3. Invite `sincerelyhers` (`637445353164`) as a member account.
-4. Create OUs: `sincerelyhers-internal`, `sincerelyhers-saas`.
-5. Create `sincerelyhers-dev` account under Organizations. Move both member accounts into `sincerelyhers-internal`.
-6. Enable and attach SCPs:
-   - `RegionLockdown` → `sincerelyhers-internal` OU
+1. ~~Create the management account (new root email).~~ **Done.**
+2. ~~Enable AWS Organizations — **all features** mode (required for SCPs).~~ **Done.**
+3. ~~Invite `sincerelyhers` (`637445353164`) as a member account.~~ **Done.**
+4. ~~Create OUs: `sincerelyhers-internal`, `sincerelyhers-saas`.~~ **Done.**
+5. ~~Create `sincerelyhers-dev` account under Organizations. Move both member accounts into `sincerelyhers-internal`.~~ **Done.**
+6. **Next:** Enable and attach SCPs:
+   - `RegionLockdown` → `sincerelyhers-internal` OU (`ou-b2n7-hyxkrhhl`)
    - `ProtectCloudTrail` → `sincerelyhers-internal` OU
-   - `ProtectProductionSecrets` → `sincerelyhers` (prod) account only
+   - `ProtectProductionSecrets` → `sincerelyhers` (`637445353164`) only
 7. Enable IAM Identity Center in the management account. Create user, permission sets (`AdministratorAccess`, `DeveloperAccess`, `ReadOnlyAccess`), and account assignments.
 8. Activate IAM billing access in each member-account root (one root login each, one-time).
 9. Enable CloudTrail (all regions) in each member account.
