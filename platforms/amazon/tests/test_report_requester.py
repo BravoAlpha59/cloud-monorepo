@@ -7,7 +7,7 @@ import boto3
 import pytest
 
 
-SELLER_ALIAS = "sincerely-hers"
+SELLER_ALIAS = "SH"
 TABLE_NAME = "test-amazon-report-jobs"
 
 SAMPLE_EVENT = {

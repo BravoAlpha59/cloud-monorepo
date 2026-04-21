@@ -31,7 +31,7 @@ These are final. Do not re-open them.
 - **App name**: TODO
 - **Client ID (LWA)**: TODO — stored in Secrets Manager, never in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
-- **Sellers**: four total. Sincerely Hers is seller #1; the other three aliases are TODO.
+- **Sellers**: five total, each identified internally by a short alias used as the path segment in secret names and S3 keys. `SH` (Sincerely Hers) is seller #1 and the first onboarded. The other four — `KK`, `LLG`, `73J`, `OH` — are pending authorization to the Sincerely Services SPP app (each seller grants the app OAuth access from their Seller Central).
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
 - **Credentials rule**: never hardcoded. All SP-API and AWS credentials come from Secrets Manager at runtime.
 

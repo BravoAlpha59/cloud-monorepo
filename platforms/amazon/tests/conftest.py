@@ -7,7 +7,7 @@ import pytest
 from moto import mock_aws
 
 
-SELLER_ALIAS = "sincerely-hers"
+SELLER_ALIAS = "SH"
 SECRETS_PREFIX = "sp-api/sincerely-services"
 TABLE_NAME = "test-amazon-report-jobs"
 BUCKET_NAME = "test-sincerelyhers-reports-dev"

@@ -8,7 +8,7 @@ import pytest
 
 REPORT_ID = "REPORT-123"
 DOCUMENT_ID = "amzn1.spdoc.1.3.test"
-SELLER_ALIAS = "sincerely-hers"
+SELLER_ALIAS = "SH"
 REPORT_TYPE = "GET_FLAT_FILE_OPEN_LISTINGS_DATA"
 MARKETPLACE_ID = "ATVPDKIKX0DER"
 TABLE_NAME = "test-amazon-report-jobs"

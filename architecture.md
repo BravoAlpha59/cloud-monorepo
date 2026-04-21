@@ -60,7 +60,7 @@ One rule per `(seller_alias × report_type)`. Cron or rate expression. Payload s
 
 ```json
 {
-  "seller_alias": "sincerely-hers",
+  "seller_alias": "SH",
   "marketplace_id": "ATVPDKIKX0DER",
   "report_type": "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
   "lookback_days": 1
@@ -103,7 +103,7 @@ Adding a report type or seller is a template change plus a new rule — no handl
 One bucket per environment, cross-platform.
 
 - Key convention: `{platform}/{app-context}/{seller-alias}/{report-type}/{YYYY-MM-DD}/{report-id}.{ext}`
-  - Example: `amazon/sincerely-services/sincerely-hers/GET_FLAT_FILE_OPEN_LISTINGS_DATA/2026-04-20/abc123.tsv`
+  - Example: `amazon/sincerely-services/SH/GET_FLAT_FILE_OPEN_LISTINGS_DATA/2026-04-20/abc123.tsv`
 - Versioning: off (reports are immutable).
 - Lifecycle: Standard-IA at 30 days, Glacier at 90 days.
 - Public access: fully blocked.
@@ -117,7 +117,7 @@ Amazon-specific schema → lives in **platform stack** (`platforms/amazon/templa
 | Attribute | Type | Notes |
 |---|---|---|
 | `report_id` | S | Partition key. From SP-API `createReport` response. |
-| `seller_alias` | S | e.g. `sincerely-hers` |
+| `seller_alias` | S | e.g. `SH` |
 | `report_type` | S | e.g. `GET_FLAT_FILE_OPEN_LISTINGS_DATA` |
 | `marketplace_id` | S | `ATVPDKIKX0DER` for US |
 | `status` | S | `REQUESTED` / `PROCESSING` / `COMPLETED` / `FAILED` |
