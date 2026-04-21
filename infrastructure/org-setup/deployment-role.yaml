@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  DeploymentRole — the CloudFormation service role that `sam deploy`
+  assumes when deploying Sincerely Services platform stacks. In the
+  prod account it is the ONLY principal the ProtectProductionSecrets
+  SCP allows to write `sp-api/*` Secrets Manager values.
+
+  Deployable in both prod (`637445353164`) and dev (`431412299701`)
+  accounts with no template changes — all ARN fields resolve via
+  AWS pseudo-parameters.
+
+  Must be created BEFORE the ProtectProductionSecrets SCP is attached
+  to prod. The SCP names this role's ARN in its exception clause;
+  attaching it first would lock every principal out of prod
+  Secrets Manager writes.
+
+Resources:
+  DeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DeploymentRole
+      Description: CloudFormation service role for sam deploy.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: DeploymentRolePermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ManageStackResources
+                Effect: Allow
+                Action:
+                  - lambda:*
+                  - dynamodb:*
+                  - sqs:*
+                  - events:*
+                  - s3:*
+                  - ses:*
+                  - logs:*
+                  - cloudformation:*
+                Resource: "*"
+              - Sid: ManageIAMRolesInAccount
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:PassRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+              - Sid: SpApiSecretsWrites
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecretVersionIds
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:UpdateSecret
+                  - secretsmanager:DeleteSecret
+                  - secretsmanager:TagResource
+                  - secretsmanager:UntagResource
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sp-api/*"
+
+Outputs:
+  DeploymentRoleArn:
+    Description: ARN of DeploymentRole — pass to `sam deploy --role-arn`.
+    Value: !GetAtt DeploymentRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-DeploymentRoleArn"
