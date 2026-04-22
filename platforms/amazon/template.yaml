@@ -18,6 +18,14 @@ Parameters:
     Type: String
     Default: sincerelyhers-base-dev
     Description: Name of the cross-environment base stack whose exports we import.
+  NotificationRecipients:
+    Type: CommaDelimitedList
+    Default: rarrington@sincerelyhers.com
+    Description: >
+      Recipients of report-ready emails. Any non-empty list enables
+      email delivery from ReportProcessor; set to an empty value to
+      disable without code changes. In SES sandbox mode, every address
+      here must already be verified in SES.
 
 Globals:
   Function:
@@ -110,6 +118,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "${Environment}-ReportProcessorRole"
+      MaxSessionDuration: 43200  # 12h — extends validity of pre-signed URLs we generate
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -137,13 +146,14 @@ Resources:
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                 Resource: !GetAtt ReportReadyQueue.Arn
-        - PolicyName: S3Write
+        - PolicyName: S3ReadWrite
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - s3:PutObject
+                  - s3:GetObject
                 Resource:
                   Fn::Sub:
                     - "${BucketArn}/amazon/*"
@@ -158,6 +168,14 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:UpdateItem
                 Resource: !GetAtt AmazonReportJobsTable.Arn
+        - PolicyName: SesSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
 
   # ---- Lambda: ReportRequester ----
   ReportRequesterFunction:
@@ -188,6 +206,9 @@ Resources:
           SECRETS_PREFIX: !Ref SecretsPrefix
           REPORTS_BUCKET:
             Fn::ImportValue: !Sub "${BaseStackName}-ReportsBucketName"
+          SES_SENDER_EMAIL:
+            Fn::ImportValue: !Sub "${BaseStackName}-SesSenderEmail"
+          SES_RECIPIENTS: !Join [",", !Ref NotificationRecipients]
       Events:
         ReportReady:
           Type: SQS

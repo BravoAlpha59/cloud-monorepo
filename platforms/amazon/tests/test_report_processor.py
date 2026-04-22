@@ -101,6 +101,75 @@ def test_happy_path_writes_s3_and_marks_completed(aws, mock_fetch):
     assert obj["Body"].read() == REPORT_PAYLOAD
 
 
+def test_happy_path_sends_ses_email(aws, mock_fetch, mocker):
+    from handlers.report_processor import lambda_handler
+
+    spy = mocker.spy(
+        __import__("handlers.report_processor", fromlist=["notifications"]).notifications,
+        "send_report_ready",
+    )
+    _seed_job()
+
+    lambda_handler(_sqs_event(_notification()), None)
+
+    spy.assert_called_once()
+    kwargs = spy.call_args.kwargs
+    assert kwargs["seller_alias"] == SELLER_ALIAS
+    assert kwargs["report_type"] == REPORT_TYPE
+    assert kwargs["report_id"] == REPORT_ID
+    assert kwargs["report_size_bytes"] == len(REPORT_PAYLOAD)
+
+
+def test_ses_failure_does_not_fail_lambda(aws, mock_fetch, mocker):
+    """Email sending errors are logged; the job must still settle as COMPLETED
+    and the Lambda must not re-raise (or SQS would redrive an already-written report)."""
+    from handlers.report_processor import lambda_handler
+
+    mocker.patch(
+        "handlers.report_processor.notifications.send_report_ready",
+        side_effect=RuntimeError("SES down"),
+    )
+    _seed_job()
+
+    lambda_handler(_sqs_event(_notification()), None)  # must not raise
+
+    job = _get_job()
+    assert job["status"] == "COMPLETED"
+
+
+def test_ses_skipped_when_recipients_empty(aws, mock_fetch, monkeypatch):
+    """With SES_RECIPIENTS empty, the handler still marks the job COMPLETED —
+    the unit-level check that no SES call happens lives in test_notifications."""
+    from handlers.report_processor import lambda_handler
+
+    monkeypatch.setenv("SES_RECIPIENTS", "")
+    _seed_job()
+
+    lambda_handler(_sqs_event(_notification()), None)
+
+    assert _get_job()["status"] == "COMPLETED"
+
+
+def test_notifications_returns_none_when_recipients_empty(aws, monkeypatch, mocker):
+    """send_report_ready is a no-op when SES_RECIPIENTS is empty — no boto3 clients created."""
+    from sincerelyhers_amazon import notifications
+
+    monkeypatch.setenv("SES_RECIPIENTS", "")
+    boto_spy = mocker.spy(notifications.boto3, "client")
+
+    result = notifications.send_report_ready(
+        bucket=BUCKET_NAME,
+        key="some/key.tsv",
+        seller_alias=SELLER_ALIAS,
+        report_type=REPORT_TYPE,
+        report_id=REPORT_ID,
+        report_size_bytes=10,
+    )
+
+    assert result is None
+    boto_spy.assert_not_called()
+
+
 def test_non_done_status_marks_failed_and_skips_download(aws, mock_fetch):
     from handlers.report_processor import lambda_handler
 
@@ -141,6 +210,23 @@ def test_download_failure_marks_failed_and_reraises(aws, mock_fetch):
     job = _get_job()
     assert job["status"] == "FAILED"
     assert job["error_message"] == "boom"
+
+
+def test_unknown_report_is_skipped_not_failed(aws, mock_fetch):
+    """REPORT_PROCESSING_FINISHED notifications for reports we didn't request
+    (e.g., another client of the same SPP app) must be dropped, not written
+    as FAILED, because that would pollute our job table with events we
+    don't own. The DDB row for this report_id should not exist after the call."""
+    from handlers.report_processor import lambda_handler
+
+    # Deliberately do NOT seed a job row for REPORT_ID.
+    lambda_handler(_sqs_event(_notification()), None)
+
+    mock_fetch.assert_not_called()
+    response = boto3.resource("dynamodb", region_name="us-east-2").Table(TABLE_NAME).get_item(
+        Key={"report_id": REPORT_ID},
+    )
+    assert "Item" not in response
 
 
 def test_s3_key_uses_report_type_extension(aws, mock_fetch):

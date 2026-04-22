@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import boto3
 
-from sincerelyhers_amazon import credentials, dynamodb, report_document
+from sincerelyhers_amazon import credentials, dynamodb, notifications, report_document
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -47,7 +47,16 @@ def lambda_handler(event: dict, context: object) -> None:
 
 
 def _process_one(report_id: str, document_id: str) -> None:
-    job = dynamodb.get_job(report_id)
+    try:
+        job = dynamodb.get_job(report_id)
+    except KeyError:
+        # Some other Sincerely Services SPP-app client may have requested the
+        # report; Amazon still delivers the notification to our destination
+        # because it's the only REPORT_PROCESSING_FINISHED subscription for
+        # this seller. Not ours to process — log and drop the SQS message.
+        logger.warning("Notification for unknown report %s; skipping", report_id)
+        return
+
     seller_alias: str = job["seller_alias"]
     report_type: str = job["report_type"]
 
@@ -68,6 +77,19 @@ def _process_one(report_id: str, document_id: str) -> None:
         completed_at=now.isoformat(),
     )
     logger.info("Completed report %s -> s3://%s/%s", report_id, bucket, key)
+
+    # Notify; failure here must not redrive the already-complete job.
+    try:
+        notifications.send_report_ready(
+            bucket=bucket,
+            key=key,
+            seller_alias=seller_alias,
+            report_type=report_type,
+            report_id=report_id,
+            report_size_bytes=len(raw),
+        )
+    except Exception:
+        logger.exception("SES notification failed for %s; job still COMPLETED", report_id)
 
 
 def _s3_key(

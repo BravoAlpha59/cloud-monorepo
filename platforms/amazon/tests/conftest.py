@@ -12,6 +12,8 @@ SECRETS_PREFIX = "sp-api/sincerely-services"
 TABLE_NAME = "test-amazon-report-jobs"
 BUCKET_NAME = "test-sincerelyhers-reports-dev"
 REGION = "us-east-2"
+SES_SENDER = "test-sender@example.com"
+SES_RECIPIENTS = "test-recipient@example.com"
 
 SECRET_PAYLOAD = {
     "client_id": "amzn1.application-oa2-client.test",
@@ -31,6 +33,8 @@ def _aws_env(monkeypatch):
     monkeypatch.setenv("REPORT_JOBS_TABLE", TABLE_NAME)
     monkeypatch.setenv("SECRETS_PREFIX", SECRETS_PREFIX)
     monkeypatch.setenv("REPORTS_BUCKET", BUCKET_NAME)
+    monkeypatch.setenv("SES_SENDER_EMAIL", SES_SENDER)
+    monkeypatch.setenv("SES_RECIPIENTS", SES_RECIPIENTS)
 
 
 @pytest.fixture()
@@ -56,5 +60,8 @@ def aws():
             Bucket=BUCKET_NAME,
             CreateBucketConfiguration={"LocationConstraint": REGION},
         )
+
+        ses = boto3.client("ses", region_name=REGION)
+        ses.verify_email_identity(EmailAddress=SES_SENDER)
 
         yield

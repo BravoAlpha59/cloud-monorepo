@@ -11,6 +11,14 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
+  SesSenderEmail:
+    Type: String
+    Default: rarrington@sincerelyhers.com
+    Description: >
+      Verified SES email identity that platform stacks use as the sender
+      for report-ready notifications. Creating this resource triggers a
+      verification email to this address — clicking the link enables
+      sending. Until verified, ses:SendEmail from the identity fails.
 
 Resources:
   ReportsBucket:
@@ -36,6 +44,11 @@ Resources:
               - StorageClass: GLACIER
                 TransitionInDays: 90
 
+  SesSenderIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SesSenderEmail
+
 Outputs:
   ReportsBucketArn:
     Description: ARN of the cross-platform reports bucket.
@@ -47,3 +60,13 @@ Outputs:
     Value: !Ref ReportsBucket
     Export:
       Name: !Sub "${AWS::StackName}-ReportsBucketName"
+  SesSenderEmail:
+    Description: Email address of the verified SES sender identity.
+    Value: !Ref SesSenderEmail
+    Export:
+      Name: !Sub "${AWS::StackName}-SesSenderEmail"
+  SesSenderIdentityArn:
+    Description: ARN of the SES sender identity (for ses:SendEmail IAM scoping).
+    Value: !Sub "arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}"
+    Export:
+      Name: !Sub "${AWS::StackName}-SesSenderIdentityArn"

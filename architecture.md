@@ -45,7 +45,7 @@ Design specification for cloud-monorepo services. Complements [CLAUDE.md](CLAUDE
                      SES SendEmail  (optional, per rule config)
                         │
                         ▼
-              Recipient receives 7-day pre-signed S3 URL
+              Recipient receives 12-hour pre-signed S3 URL
 ```
 
 On unhandled exception in either Lambda: `status = FAILED` with `error_message`. SQS retries up to 3× then routes the message to `sp-api-report-ready-dlq`.
@@ -102,7 +102,7 @@ SP-API can only write to the queue if the queue's resource policy grants `sqs:Se
 - Gunzips if `compressionAlgorithm` is set.
 - Writes raw file to S3 (key convention below).
 - Updates `AmazonReportJobs` with `status = COMPLETED`, `s3_key`, `completed_at`.
-- Optional SES email per rule — uses a freshly-generated 7-day pre-signed URL (not the 5-min SP-API one).
+- Optional SES email per rule — uses a freshly-generated pre-signed S3 URL (not the 5-min SP-API one). Current effective expiry is 12 hours (bounded by `ReportProcessorExecutionRole.MaxSessionDuration`); a true 7-day URL would need long-lived IAM user credentials or CloudFront signed URLs and is deferred.
 - Memory 512 MB, timeout 4 min (SQS visibility 5 min leaves a 1-min safety margin).
 
 #### S3 Bucket: `sincerelyhers-reports-{env}`
@@ -154,7 +154,7 @@ REQUESTED ──▶ PROCESSING ──▶ COMPLETED
 #### SES
 
 - One verified sender identity per environment (sandbox initially; request production access before cutover).
-- Email body: report type, seller, date range, row count if cheaply parseable, clickable 7-day pre-signed S3 URL.
+- Email body: report type, seller, report id, size, clickable pre-signed S3 URL (12-hour expiry; see ReportProcessor section), plain `s3://` path for recipients with direct bucket access.
 - Recipient list sourcing TBD — likely a small DynamoDB `NotificationRules` table or CFN parameter when the need arrives.
 - Lives in **base stack**; exported as `SincerelyhersSesSenderArn`.
 
