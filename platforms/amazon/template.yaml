@@ -243,6 +243,32 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt SincerelyhersReportScheduleRule.Arn
 
+  KKReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-kk-daily-report"
+      Description: "Daily open-listings report for KK"
+      ScheduleExpression: "cron(15 8 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "KK",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FLAT_FILE_OPEN_LISTINGS_DATA",
+              "lookback_days": 1
+            }
+
+  KKReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt KKReportScheduleRule.Arn
+
 Outputs:
   ReportRequesterFunctionArn:
     Description: ARN of the ReportRequester Lambda
