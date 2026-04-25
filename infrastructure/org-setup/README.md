@@ -4,7 +4,7 @@ AWS Organizations, OU structure, SCPs, IAM Identity Center, and CloudTrail setup
 
 Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../docs/chat-summaries/08-Organization%20Setup/08-Organization%20Setup.md).
 
-## Status: partially applied (Phases 1–7 done)
+## Status: fully applied (Phases 1–9 done)
 
 ### Applied
 
@@ -21,7 +21,11 @@ Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../doc
 - **SCP attached to `sincerelyhers` (prod) account**: `ProtectProductionSecrets`.
 - **DeploymentRole deployed in prod**: `arn:aws:iam::637445353164:role/DeploymentRole` (CloudFormation stack `DeploymentRole`, bootstrapped 2026-04-21 via the rarrington IAM user + console upload).
 - **IAM Identity Center** (region `us-east-2`): permission sets `AdministratorAccess` (AWS managed), `DeveloperAccess` (custom, from `permission-set-developer-access.json`), `ReadOnlyAccess` (AWS managed). Assignments: `sincerelyhers-dev` → AdministratorAccess; `sincerelyhers` (prod) → DeveloperAccess + ReadOnlyAccess; `sincerelyhers-management` → ReadOnlyAccess.
-- **SSO profiles on WSL2**: `sincerelyhers-prod` (DeveloperAccess) and `sincerelyhers-dev` (AdministratorAccess) verified via `aws sts get-caller-identity` on 2026-04-21.
+- **SSO profiles on WSL2**: `sincerelyhers-prod` (DeveloperAccess) and `sincerelyhers-dev` (AdministratorAccess) verified via `aws sts get-caller-identity` on 2026-04-21. `sincerelyhers-prod-readonly` (ReadOnlyAccess) added 2026-04-25 for read-only introspection of services not in DeveloperAccess's read scope (notably CloudTrail).
+- **IAM billing access** activated in each member account root on 2026-04-25 (Phase 8). Cost Explorer enabled in `sincerelyhers-management` on the same date.
+- **CloudTrail trails** (Phase 9, both created 2026-04-25, both multi-region with global service events, management Read+Write only, no data/insights events):
+  - Dev: `sincerelyhers-dev-cloudtrail` → `aws-cloudtrail-logs-431412299701-a27454e3`. Log file validation **off** (the trail was created via the CloudTrail Dashboard quickstart by mistake; the `ProtectCloudTrail` SCP blocks `UpdateTrail` so this can't be flipped on without a temporary SCP detach — not worth the gymnastics).
+  - Prod: `sincerelyhers-prod-cloudtrail` → `aws-cloudtrail-logs-637445353164-e3ea1f92`. Log file validation **on**. Created via the legacy `rarrington` IAM user because `DeveloperAccess` is read-only on CloudTrail and `ReadOnlyAccess` can't write either.
 
 ### Phases to execute
 
@@ -32,10 +36,10 @@ Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../doc
 5. ~~Create `sincerelyhers-dev` account under Organizations. Move both member accounts into `sincerelyhers-internal`.~~ **Done.**
 6. ~~Enable and attach SCPs (RegionLockdown + ProtectCloudTrail on `sincerelyhers-internal`; ProtectProductionSecrets on prod after DeploymentRole bootstrap).~~ **Done.**
 7. ~~Enable IAM Identity Center in the management account. Create user, permission sets (`AdministratorAccess`, `DeveloperAccess`, `ReadOnlyAccess`), and account assignments.~~ **Done.**
-8. **Next:** Activate IAM billing access in each member-account root (one root login each, one-time).
-9. Enable CloudTrail (all regions) in each member account. (Confirmed empty in both prod and dev on 2026-04-21.)
+8. ~~Activate IAM billing access in each member-account root (one root login each, one-time).~~ **Done 2026-04-25.**
+9. ~~Enable CloudTrail (all regions) in each member account.~~ **Done 2026-04-25** — see the CloudTrail trails entry under "Applied" above.
 
-Day-to-day access is via `aws configure sso` using the Identity Center portal URL. No root logins needed except for Phase 8.
+Day-to-day access is via `aws configure sso` using the Identity Center portal URL. No root logins needed going forward.
 
 ### Recommended follow-on — management SSO profile
 

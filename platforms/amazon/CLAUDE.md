@@ -28,8 +28,8 @@ These are final. Do not re-open them.
 ## SP-API App Context
 
 - **App type**: private (Sincerely Services internal; not listed on the Appstore).
-- **App name**: TODO
-- **Client ID (LWA)**: TODO — stored in Secrets Manager, never in code or config.
+- **App name**: Sincerely Services
+- **Client ID (LWA)**: `amzn1.application-oa2-client.a1629a9bab0447f582fe24db574c17f6` — stored in Secrets Manager, never in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
 - **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. `SH` (Sincerely Hers) and `KK` are onboarded to dev. The other four — `LLG`, `73J`, `OH`, `CO` — are pending authorization to the Sincerely Services SPP app (each seller grants the app OAuth access from their Seller Central).
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
