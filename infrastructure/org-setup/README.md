@@ -19,9 +19,14 @@ Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../doc
   - `sincerelyhers-dev` — `431412299701` (aws-dev@sincerelyhers.com) — DEV, created 2026/04/21
 - **SCPs attached to `sincerelyhers-internal`**: `RegionLockdown`, `ProtectCloudTrail` (alongside inherited `FullAWSAccess`).
 - **SCP attached to `sincerelyhers` (prod) account**: `ProtectProductionSecrets`.
-- **DeploymentRole deployed in prod**: `arn:aws:iam::637445353164:role/DeploymentRole` (CloudFormation stack `DeploymentRole`, bootstrapped 2026-04-21 via the rarrington IAM user + console upload).
+- **DeploymentRole deployed in both accounts** (CloudFormation stack `DeploymentRole`, same template):
+  - Prod: `arn:aws:iam::637445353164:role/DeploymentRole` — bootstrapped 2026-04-21 via the rarrington IAM user + console upload (had to precede the `ProtectProductionSecrets` SCP attachment).
+  - Dev: `arn:aws:iam::431412299701:role/DeploymentRole` — deployed 2026-04-25 via `aws cloudformation deploy --profile sincerelyhers-dev` (AdministratorAccess SSO). Optional in dev (no SCP forces its use), but kept for command-shape symmetry with prod.
 - **IAM Identity Center** (region `us-east-2`): permission sets `AdministratorAccess` (AWS managed), `DeveloperAccess` (custom, from `permission-set-developer-access.json`), `ReadOnlyAccess` (AWS managed). Assignments: `sincerelyhers-dev` → AdministratorAccess; `sincerelyhers` (prod) → DeveloperAccess + ReadOnlyAccess; `sincerelyhers-management` → ReadOnlyAccess.
-- **SSO profiles on WSL2**: `sincerelyhers-prod` (DeveloperAccess) and `sincerelyhers-dev` (AdministratorAccess) verified via `aws sts get-caller-identity` on 2026-04-21. `sincerelyhers-prod-readonly` (ReadOnlyAccess) added 2026-04-25 for read-only introspection of services not in DeveloperAccess's read scope (notably CloudTrail).
+- **SSO profiles on WSL2** (all four share a single `sincerelyhers-sso` session block in `~/.aws/config`):
+  - `sincerelyhers-prod` (DeveloperAccess) and `sincerelyhers-dev` (AdministratorAccess) — verified via `aws sts get-caller-identity` on 2026-04-21.
+  - `sincerelyhers-prod-readonly` (ReadOnlyAccess) — added 2026-04-25 for read-only introspection of services not in DeveloperAccess's read scope (notably CloudTrail).
+  - `sincerelyhers-mgmt` (ReadOnlyAccess on `sincerelyhers-management`) — added 2026-04-25; verified by calling `organizations:ListAccounts` (a management-only API). Use for org/SSO audit APIs not callable from member accounts.
 - **IAM billing access** activated in each member account root on 2026-04-25 (Phase 8). Cost Explorer enabled in `sincerelyhers-management` on the same date.
 - **CloudTrail trails** (Phase 9, both created 2026-04-25, both multi-region with global service events, management Read+Write only, no data/insights events):
   - Dev: `sincerelyhers-dev-cloudtrail` → `aws-cloudtrail-logs-431412299701-a27454e3`. Log file validation **off** (the trail was created via the CloudTrail Dashboard quickstart by mistake; the `ProtectCloudTrail` SCP blocks `UpdateTrail` so this can't be flipped on without a temporary SCP detach — not worth the gymnastics).
@@ -41,15 +46,9 @@ Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../doc
 
 Day-to-day access is via `aws configure sso` using the Identity Center portal URL. No root logins needed going forward.
 
-### Recommended follow-on — management SSO profile
+### Management SSO profile (done 2026-04-25)
 
-Assign your Identity Center user `ReadOnlyAccess` on the `sincerelyhers-management` account (if you haven't already) and add a `sincerelyhers-mgmt` SSO profile:
-
-```
-aws configure sso --profile sincerelyhers-mgmt
-```
-
-This unlocks org-level audit APIs that member accounts cannot call — `organizations:List*`, `sso-admin:List*` — so that full audits of SCP attachments, Identity Center assignments, and account placements become possible from the CLI instead of screenshots.
+`sincerelyhers-mgmt` profile (ReadOnlyAccess on the management account) is configured and verified — see the SSO profiles entry under "Applied" above. Unlocks org-level audit APIs that member accounts cannot call (`organizations:List*`, `sso-admin:List*`), so SCP attachment / Identity Center assignment / account placement audits can be done from the CLI instead of screenshots.
 
 ## SCP definitions
 
