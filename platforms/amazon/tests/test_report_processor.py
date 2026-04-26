@@ -254,6 +254,30 @@ def test_s3_key_uses_report_type_extension(aws, mock_fetch):
     assert job["s3_key"].endswith(f"{REPORT_ID}.xml")
 
 
+def test_s3_key_uses_tsv_for_fba_myi_report(aws, mock_fetch):
+    from handlers.report_processor import lambda_handler
+
+    table = boto3.resource("dynamodb", region_name="us-east-2").Table(TABLE_NAME)
+    table.put_item(
+        Item={
+            "report_id": REPORT_ID,
+            "seller_alias": SELLER_ALIAS,
+            "report_type": "GET_FBA_MYI_ALL_INVENTORY_DATA",
+            "marketplace_id": MARKETPLACE_ID,
+            "status": "REQUESTED",
+            "requested_at": "2026-04-21T08:00:00+00:00",
+        }
+    )
+
+    lambda_handler(
+        _sqs_event(_notification(reportType="GET_FBA_MYI_ALL_INVENTORY_DATA")),
+        None,
+    )
+
+    job = _get_job()
+    assert job["s3_key"].endswith(f"{REPORT_ID}.tsv")
+
+
 def mocker_creds() -> dict:
     """Expected creds-dict shape after credentials.get_sp_api_credentials resolves the test secret."""
     return {

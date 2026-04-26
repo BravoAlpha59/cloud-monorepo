@@ -104,7 +104,7 @@ def _s3_key(
 
 
 def _extension_for_report_type(report_type: str) -> str:
-    if report_type.startswith("GET_FLAT_FILE_"):
+    if report_type.startswith("GET_FLAT_FILE_") or report_type.startswith("GET_FBA_MYI_"):
         return "tsv"
     if report_type.startswith("GET_XML_"):
         return "xml"
