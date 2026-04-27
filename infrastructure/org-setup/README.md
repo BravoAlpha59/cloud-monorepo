@@ -4,6 +4,8 @@ AWS Organizations, OU structure, SCPs, IAM Identity Center, and CloudTrail setup
 
 Authoritative walkthrough: [docs/chat-summaries/08-Organization Setup](../../docs/chat-summaries/08-Organization%20Setup/08-Organization%20Setup.md).
 
+Visual overview: [docs/architecture/01-organizations.md](../../docs/architecture/01-organizations.md) — mermaid diagrams of the account tree, SCP attachments, and deploy-time identity flow. See also [03-iac-topology.md](../../docs/architecture/03-iac-topology.md) for the base/platform stack pattern and DeploymentRole flow.
+
 ## Status: fully applied (Phases 1–9 done)
 
 ### Applied

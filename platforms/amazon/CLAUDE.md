@@ -4,6 +4,10 @@ Scoped context for the Amazon platform. The monorepo-wide [root CLAUDE.md](../..
 
 This platform has its own SAM template at [platforms/amazon/template.yaml](template.yaml). It imports shared resources from the base stack (see [infrastructure/base-stack.yaml](../../infrastructure/base-stack.yaml)) via `Fn::ImportValue`. Production writes to Secrets Manager go only through `DeploymentRole` (enforced by the `ProtectProductionSecrets` SCP).
 
+**Visual references** (mermaid diagrams that render on GitHub):
+- [docs/architecture/02-amazon-runtime.md](../../docs/architecture/02-amazon-runtime.md) — runtime sequence + resource topology
+- [docs/architecture/04-secrets-and-auth.md](../../docs/architecture/04-secrets-and-auth.md) — per-seller secret layout + LWA token-exchange flow
+
 ## Overview
 
 Serverless AWS system that uses the Amazon SP-API Reports API to schedule, retrieve, store, and deliver reports for Sincerely Hers plus three additional seller accounts. Operated by Sincerely Services as a private SP-API app (not published to the Selling Partner Appstore).
