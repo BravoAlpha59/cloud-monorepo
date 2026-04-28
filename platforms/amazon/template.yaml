@@ -221,9 +221,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-sincerelyhers-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for Sincerely Hers (dev shake-out cadence; production cadence will be monthly)"
+      Description: "Daily FBA all-inventory report for Sincerely Hers (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-04-28 — implementation validated over 3 days; re-enable when adding more sellers or when prod cutover begins."
       ScheduleExpression: "cron(0 8 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget
@@ -247,9 +247,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-kk-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for KK (dev shake-out cadence; production cadence will be monthly)"
+      Description: "Daily FBA all-inventory report for KK (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-04-28 — implementation validated over 3 days; re-enable when adding more sellers or when prod cutover begins."
       ScheduleExpression: "cron(15 8 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget
