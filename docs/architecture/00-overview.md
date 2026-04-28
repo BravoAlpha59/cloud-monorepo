@@ -11,6 +11,17 @@ Living architecture documentation for the cloud-monorepo. Each page covers one s
 | [03](03-iac-topology.md) | IaC topology | Two-level stack pattern, base ↔ platform exports/imports, sam deploy + DeploymentRole flow |
 | [04](04-secrets-and-auth.md) | Secrets and auth | Per-seller secret layout, Lambda execution-role scoping, runtime LWA token exchange |
 
+## Deferred decisions / future direction
+
+This directory captures the architecture **as it is today**. For decisions that are *consciously deferred* — patterns we've evaluated but not yet built — see [docs/design/cost-minimization-review.md](../design/cost-minimization-review.md). Highlights:
+
+- **Routine vs. ad-hoc delivery split.** Today's "everything goes to SES" pattern conflates machine-to-machine and human-request flows. Deferred plan: routine reports go via EventBridge API destinations → webhook to downstream consumer; SES scopes down to explicit human-on-demand requests. Trigger to build: before the first non-human downstream consumer needs report data.
+- **Secrets Manager → SSM Parameter Store SecureString.** $0.40/secret/mo scales linearly with seller/customer count. Migration to SSM SecureString (free for standard tier) is open. Trigger: after Cost Explorer gives a real measured baseline.
+- **Lean notification-flow template** that skips S3/DDB by default — for high-volume flows like SP-API OrderChange notifications (~1–4M events/mo projected). Trigger: before the second SP-API notification flow is built.
+- **ERP-supplant framing.** A significant goal of this monorepo is to supplant the existing Odoo ERP for order/inventory data of record. The `shared/` data models (Order, OrderLine, Product, Inventory, Report) are the canonical destination; Odoo is a transient source we will migrate off of. This reshapes "downstream consumer" decisions for the routine webhook path.
+
+These should be re-read before opening any of those questions in a session — to avoid re-deriving conclusions or breaking constraints already chosen.
+
 ## Maintenance philosophy
 
 These docs decay if not updated alongside code. Three habits keep them honest:

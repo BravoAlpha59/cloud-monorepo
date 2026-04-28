@@ -79,6 +79,8 @@ Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:$
 
 Where `SecretsPrefix` defaults to `sp-api/sincerely-services` (template parameter, overridable). A future SincerelySaaS Lambda would deploy with `SecretsPrefix=sp-api/sincerely-saas` and physically cannot read Sincerely Services credentials — even though both Lambdas might run in the same broader environment, they're in different AWS accounts (per the SPP app isolation rule, SincerelySaaS lives in a separate account under the `sincerelyhers-saas` OU).
 
+> **Future direction.** Secrets Manager at $0.40/secret/mo is the only cost line that scales linearly with seller/customer count. Two deferred decisions ([cost-minimization-review.md](../design/cost-minimization-review.md#where-the-actual-savings-live)): (a) **SSM Parameter Store SecureString** as a cheaper backing store for refresh tokens that don't auto-rotate, and (b) **per-app token consolidation** for SaaS-tier customer counts where per-secret cost becomes meaningful. Neither is built. Don't change today's per-seller secret layout without re-reading those tradeoffs first — security boundary > $2/mo savings at current scale.
+
 ## Runtime auth flow
 
 The sequence below shows what happens *inside* either Lambda when it needs to call SP-API. `python-amazon-sp-api` handles the LWA token exchange transparently — we hand it a credentials dict and it does the rest.

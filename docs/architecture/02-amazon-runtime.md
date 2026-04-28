@@ -57,6 +57,8 @@ Key behaviors that the diagram only hints at:
 - **DLQ on real failures**: SQS redrives 3× then sends to `{env}-sp-api-report-ready-dlq`. Retries help with transient SP-API throttling.
 - **SES failure does not redrive**: by the time we email, the job is already `COMPLETED` in DynamoDB and the file is in S3. SES exceptions are caught and logged; the SQS message is acked.
 
+> **Future direction.** Today every report — daily-scheduled and one-off — goes out via SES. Deferred plan ([cost-minimization-review.md, Idea D](../design/cost-minimization-review.md#idea-d-split-delivery-into-routine-webhook-vs-ad-hoc-ses)): split delivery into a **routine** path (EventBridge custom event → API destination → downstream webhook URL, with built-in retry) for machine-to-machine consumption, keeping **SES** strictly for the explicit human-request path. Don't extend the current SES flow as if it's the long-term routine channel.
+
 ## Resource topology
 
 ```mermaid
