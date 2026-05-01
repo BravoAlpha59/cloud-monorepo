@@ -269,6 +269,110 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt KKReportScheduleRule.Arn
 
+  LLGReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-llg-fba-inventory-daily"
+      Description: "Daily FBA all-inventory report for LLG (dev shake-out cadence; production cadence will be monthly)."
+      ScheduleExpression: "cron(30 8 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "LLG",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FBA_MYI_ALL_INVENTORY_DATA",
+              "lookback_days": 1
+            }
+
+  LLGReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt LLGReportScheduleRule.Arn
+
+  Seller73JReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-73j-fba-inventory-daily"
+      Description: "Daily FBA all-inventory report for 73J (dev shake-out cadence; production cadence will be monthly)."
+      ScheduleExpression: "cron(45 8 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "73J",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FBA_MYI_ALL_INVENTORY_DATA",
+              "lookback_days": 1
+            }
+
+  Seller73JReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt Seller73JReportScheduleRule.Arn
+
+  OHReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-oh-fba-inventory-daily"
+      Description: "Daily FBA all-inventory report for OH (dev shake-out cadence; production cadence will be monthly)."
+      ScheduleExpression: "cron(0 9 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "OH",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FBA_MYI_ALL_INVENTORY_DATA",
+              "lookback_days": 1
+            }
+
+  OHReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt OHReportScheduleRule.Arn
+
+  COReportScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${Environment}-co-fba-inventory-daily"
+      Description: "Daily FBA all-inventory report for CO (dev shake-out cadence; production cadence will be monthly)."
+      ScheduleExpression: "cron(15 9 * * ? *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ReportRequesterFunction.Arn
+          Id: ReportRequesterTarget
+          Input: >
+            {
+              "seller_alias": "CO",
+              "marketplace_id": "ATVPDKIKX0DER",
+              "report_type": "GET_FBA_MYI_ALL_INVENTORY_DATA",
+              "lookback_days": 1
+            }
+
+  COReportRequesterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ReportRequesterFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt COReportScheduleRule.Arn
+
 Outputs:
   ReportRequesterFunctionArn:
     Description: ARN of the ReportRequester Lambda
