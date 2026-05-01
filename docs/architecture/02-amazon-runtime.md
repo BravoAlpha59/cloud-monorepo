@@ -106,7 +106,7 @@ Each onboarded seller adds three things, all per-alias:
 2. An EventBridge rule in [platforms/amazon/template.yaml](../../platforms/amazon/template.yaml) targeting `ReportRequester` with the seller's input payload.
 3. An SP-API notification subscription via `scripts/sp_api_notifications.py create-subscription {alias} {destinationId}`. The destination (an SP-API resource that points at our SQS queue) is reused across all sellers.
 
-The `/onboard-amazon-seller` skill automates all three steps for the pending aliases (`LLG`, `73J`, `OH`, `CO`).
+The `/onboard-amazon-seller` skill automates all three steps; it was used to bring `LLG`, `73J`, `OH`, `CO` online in dev alongside the original `SH` and `KK`.
 
 ## Locked decisions worth re-flagging
 

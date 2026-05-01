@@ -25,10 +25,10 @@ flowchart TD
     subgraph SS["sp-api/sincerely-services/*"]
       SH["SH/credentials"]
       KK["KK/credentials"]
-      LLG["LLG/credentials (pending)"]
-      J73["73J/credentials (pending)"]
-      OH["OH/credentials (pending)"]
-      CO["CO/credentials (pending)"]
+      LLG["LLG/credentials"]
+      J73["73J/credentials"]
+      OH["OH/credentials"]
+      CO["CO/credentials"]
     end
 
     subgraph FUTURE["sp-api/sincerely-saas/*"]
@@ -49,10 +49,8 @@ flowchart TD
     SM -. "future" .-> FUTURE3
 
     classDef live fill:#dcfce7,stroke:#16a34a,color:#000
-    classDef pending fill:#fef3c7,stroke:#d97706,color:#000
     classDef future fill:#e5e7eb,stroke:#6b7280,color:#000
-    class SH,KK live
-    class LLG,J73,OH,CO pending
+    class SH,KK,LLG,J73,OH,CO live
     class Saas,Dick,Bn future
 ```
 

@@ -35,7 +35,7 @@ These are final. Do not re-open them.
 - **App name**: Sincerely Services
 - **Client ID (LWA)**: `amzn1.application-oa2-client.a1629a9bab0447f582fe24db574c17f6` — stored in Secrets Manager, never in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
-- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. `SH` (Sincerely Hers) and `KK` are onboarded to dev. The other four — `LLG`, `73J`, `OH`, `CO` — are pending authorization to the Sincerely Services SPP app (each seller grants the app OAuth access from their Seller Central).
+- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev. SH/KK rules are currently `DISABLED` (post-shake-out, per commit 8f2a059); LLG/73J/OH/CO rules are `ENABLED` for trial runs.
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
 - **Credentials rule**: never hardcoded. All SP-API and AWS credentials come from Secrets Manager at runtime.
 
@@ -49,7 +49,6 @@ These are final. Do not re-open them.
 
 Out of scope for this milestone and still pending:
 
-- Onboard sellers **LLG**, **73J**, **OH**, **CO** to the Sincerely Services SPP app; store each refresh_token at `sp-api/sincerely-services/{alias}/credentials`; add per-seller EventBridge schedule rules to `template.yaml`; and run `scripts/sp_api_notifications.py create-subscription {alias} {destinationId}` for each. Destination can be reused across sellers.
 - Prod base and platform stacks (dev exercised first).
 - Graduate pre-signed URL expiry from 12 h to 7 days (needs CloudFront signed URLs or long-lived IAM user creds — not a Lambda-role thing).
 - Domain-identity SES + production-access request before prod cutover.
