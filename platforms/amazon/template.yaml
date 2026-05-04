@@ -273,9 +273,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-llg-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for LLG (dev shake-out cadence; production cadence will be monthly)."
+      Description: "Daily FBA all-inventory report for LLG (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-05-04 — trial runs validated over 3 days; re-enable when prod cutover begins."
       ScheduleExpression: "cron(30 8 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget
@@ -299,9 +299,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-73j-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for 73J (dev shake-out cadence; production cadence will be monthly)."
+      Description: "Daily FBA all-inventory report for 73J (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-05-04 — trial runs validated over 3 days; re-enable when prod cutover begins."
       ScheduleExpression: "cron(45 8 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget
@@ -325,9 +325,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-oh-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for OH (dev shake-out cadence; production cadence will be monthly)."
+      Description: "Daily FBA all-inventory report for OH (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-05-04 — trial runs validated over 3 days; re-enable when prod cutover begins."
       ScheduleExpression: "cron(0 9 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget
@@ -351,9 +351,9 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub "${Environment}-co-fba-inventory-daily"
-      Description: "Daily FBA all-inventory report for CO (dev shake-out cadence; production cadence will be monthly)."
+      Description: "Daily FBA all-inventory report for CO (dev shake-out cadence; production cadence will be monthly). DISABLED 2026-05-04 — trial runs validated over 3 days; re-enable when prod cutover begins."
       ScheduleExpression: "cron(15 9 * * ? *)"
-      State: ENABLED
+      State: DISABLED
       Targets:
         - Arn: !GetAtt ReportRequesterFunction.Arn
           Id: ReportRequesterTarget

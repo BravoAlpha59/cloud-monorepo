@@ -35,7 +35,7 @@ These are final. Do not re-open them.
 - **App name**: Sincerely Services
 - **Client ID (LWA)**: `amzn1.application-oa2-client.a1629a9bab0447f582fe24db574c17f6` — stored in Secrets Manager, never in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
-- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev. SH/KK rules are currently `DISABLED` (post-shake-out, per commit 8f2a059); LLG/73J/OH/CO rules are `ENABLED` for trial runs.
+- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev with all six rules currently `DISABLED` (SH/KK post-shake-out per commit 8f2a059; LLG/73J/OH/CO post-3-day-trial 2026-05-04, with trial S3 + DDB data deleted). Re-enable when prod cutover begins.
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
 - **Credentials rule**: never hardcoded. All SP-API and AWS credentials come from Secrets Manager at runtime.
 
