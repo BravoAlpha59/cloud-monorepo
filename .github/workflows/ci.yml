@@ -21,13 +21,10 @@ jobs:
           python-version-file: .python-version
       - name: Install dependencies
         run: uv sync --frozen
-      - name: Show installed amazon package layout
-        run: |
-          ls -la .venv/lib/python*/site-packages/ | grep -E 'sincerelyhers|handlers' || true
-          cat .venv/lib/python*/site-packages/sincerelyhers_amazon.pth 2>/dev/null || true
-          uv run python -c "import handlers, sys; print('handlers.__file__=', handlers.__file__); print('handlers.__path__=', list(handlers.__path__)); import os; print('listdir:', sorted(os.listdir(list(handlers.__path__)[0])))"
       - name: Run pytest
         run: uv run pytest
+        env:
+          PYTHONPATH: ${{ github.workspace }}/platforms/amazon/src
 
   lint:
     name: Lint (ruff)
