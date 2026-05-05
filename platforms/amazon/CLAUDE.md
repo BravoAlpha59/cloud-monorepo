@@ -62,7 +62,7 @@ These exist in Amazon's SP-API infrastructure, attached to the Sincerely Service
   - `reportType = GET_FBA_MYI_UNSUPPRESSED_INVENTORY_DATA`
   - `period = PT4H`, `marketplaceIds = [ATVPDKIKX0DER]`
   - Origin unknown — predates this monorepo.
-- **External integration in account `637445353164` (prod)** is actively using the Sincerely Services app with SH's credentials. Evidence:
+- **External integration in the prod account (`<PROD-ACCOUNT-ID>`)** is actively using the Sincerely Services app with SH's credentials. Evidence:
   - Pre-existing notification destination `SH-OrderChange-Queue` (destinationId `6f5f7648-a6d5-41cc-8916-7c470f48c22c`) points at an `OrderChangesQueue` in that account.
   - 24h `getReports` audit shows ~30 `GET_FBA_MYI_UNSUPPRESSED_INVENTORY_DATA` and ~4 `GET_FLAT_FILE_OPEN_LISTINGS_DATA` reports per day that this monorepo did not request, at a cadence higher than the PT4H schedule would produce (implies direct `createReport` calls from that integration in addition to the schedule).
   - That integration does **not** appear to use SP-API Notifications — our `REPORT_PROCESSING_FINISHED` subscription succeeded at creation time, and SP-API allows only one subscription per `(seller × app × notificationType)`, so no prior subscription existed. It likely polls `getReports` to discover completed reports.

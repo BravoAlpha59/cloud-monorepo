@@ -1,0 +1,37 @@
+# .identifiers.local.example — copy to .identifiers.local and fill in values.
+#
+# Setup:
+#   cp .identifiers.local.example .identifiers.local
+#   $EDITOR .identifiers.local                 # replace each X-string with the real value
+#   source .identifiers.local                  # exports vars into your shell for `make`
+#
+# .identifiers.local is gitignored so the literal values never leave this machine.
+# Docs and SAM templates reference these via placeholders like <PROD-ACCOUNT-ID>;
+# this file is the canonical place to look up what each placeholder maps to.
+
+# ---- AWS account IDs (consumed by Makefile prod-deploy targets) ----
+
+export MGMT_ACCOUNT_ID=XXXXXXXXXXXX
+export PROD_ACCOUNT_ID=XXXXXXXXXXXX
+export DEV_ACCOUNT_ID=XXXXXXXXXXXX
+
+# ---- Reference identifiers (not exported; documented for ops lookup) ----
+
+# AWS Organization
+#   <ORG-ID>          o-XXXXXXXXXX                       # `aws organizations describe-organization`
+#   <ORG-ROOT-ID>     r-XXXX                             # `aws organizations list-roots`
+#   <INTERNAL-OU-ID>  ou-XXXX-XXXXXXXX                   # sincerelyhers-internal
+#   <SAAS-OU-ID>      ou-XXXX-XXXXXXXX                   # sincerelyhers-saas (reserved)
+
+# Sincerely Services SPP app (private LWA app for Amazon SP-API)
+#   <LWA-CLIENT-ID>   amzn1.application-oa2-client.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#   (client_secret is stored in Secrets Manager only — never in any file, including this one)
+
+# External-integration SP-API destination (SH-OrderChange-Queue, predates this monorepo)
+#   <EXTERNAL-DESTINATION-ID>  XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+# External-integration SP-API report schedule (predates this monorepo)
+#   <EXTERNAL-REPORT-SCHEDULE-ID>  XXXXXXXXXXX
+
+# CloudTrail buckets (one per member account; account ID + 8-hex suffix from console quickstart)
+#   <DEV-CT-BUCKET-SUFFIX>   XXXXXXXX
+#   <PROD-CT-BUCKET-SUFFIX>  XXXXXXXX

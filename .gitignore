@@ -30,3 +30,4 @@ docs/chat-summaries/
 # environment
 .env
 .envrc
+.identifiers.local

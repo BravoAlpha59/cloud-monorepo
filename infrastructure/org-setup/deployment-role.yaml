@@ -5,7 +5,7 @@ Description: >
   prod account it is the ONLY principal the ProtectProductionSecrets
   SCP allows to write `sp-api/*` Secrets Manager values.
 
-  Deployable in both prod (`637445353164`) and dev (`431412299701`)
+  Deployable in both prod (`<PROD-ACCOUNT-ID>`) and dev (`<DEV-ACCOUNT-ID>`)
   accounts with no template changes — all ARN fields resolve via
   AWS pseudo-parameters.
 

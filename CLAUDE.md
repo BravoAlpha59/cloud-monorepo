@@ -23,11 +23,13 @@ These are final. Do not re-open them or suggest alternatives.
 - **IaC**: AWS SAM (CloudFormation underneath). Two-level stack pattern — see "IaC Layout" below.
 - **AWS SDK**: `boto3`.
 - **Region**: `us-east-2` for all resources. `us-east-1` is also permitted for global services that route through it (IAM, STS, CloudFront).
-- **Accounts**: three-account model under AWS Organizations (Root `r-b2n7`)
-  - Management: `sincerelyhers-management` (`504804196123`) — owns the org, billing, SCPs; no workloads. At Root.
-  - Prod: `sincerelyhers` (`637445353164`) — in `sincerelyhers-internal` OU (`ou-b2n7-hyxkrhhl`).
-  - Dev: `sincerelyhers-dev` (`431412299701`) — in `sincerelyhers-internal` OU.
-  - `sincerelyhers-saas` OU (`ou-b2n7-1t37srxw`) is reserved for the future SincerelySaaS public app.
+- **Accounts**: three-account model under AWS Organizations (Root `<ORG-ROOT-ID>`)
+  - Management: `sincerelyhers-management` (`<MGMT-ACCOUNT-ID>`) — owns the org, billing, SCPs; no workloads. At Root.
+  - Prod: `sincerelyhers` (`<PROD-ACCOUNT-ID>`) — in `sincerelyhers-internal` OU (`<INTERNAL-OU-ID>`).
+  - Dev: `sincerelyhers-dev` (`<DEV-ACCOUNT-ID>`) — in `sincerelyhers-internal` OU.
+  - `sincerelyhers-saas` OU (`<SAAS-OU-ID>`) is reserved for the future SincerelySaaS public app.
+
+  Literal account IDs and Org IDs live in `.identifiers.local` (gitignored) — see `.identifiers.local.example`.
 - **Access model**: AWS IAM Identity Center (SSO). `aws configure sso` with named profiles `sincerelyhers-prod` and `sincerelyhers-dev`. No new long-lived IAM users in member accounts; existing `rarrington` user is historical and targeted for deprecation once Identity Center is fully stood up.
 - **Prod write protection**: a `DeploymentRole` (assumed by CloudFormation during `sam deploy`) is the only principal allowed to write production Secrets Manager values under `sp-api/*`. Enforced via SCP — see below.
 - **Secrets**: AWS Secrets Manager only. No env-var or file-based credentials. Naming includes the SPP app context — see "SP-API App Isolation".
@@ -37,11 +39,11 @@ These are final. Do not re-open them or suggest alternatives.
 
 ## AWS Account Context
 
-- **Organization layout**: Root `r-b2n7` → `sincerelyhers-management` (at Root) / `sincerelyhers-internal` OU `ou-b2n7-hyxkrhhl` (prod + dev) / `sincerelyhers-saas` OU `ou-b2n7-1t37srxw` (future).
+- **Organization layout**: Root `<ORG-ROOT-ID>` → `sincerelyhers-management` (at Root) / `sincerelyhers-internal` OU `<INTERNAL-OU-ID>` (prod + dev) / `sincerelyhers-saas` OU `<SAAS-OU-ID>` (future).
 - **Region**: `us-east-2` (with `us-east-1` carve-out for global services).
-- **Prod**: `sincerelyhers` — account ID `637445353164`.
-- **Dev**: `sincerelyhers-dev` — account ID `431412299701`.
-- **Management**: `sincerelyhers-management` — account ID `504804196123`.
+- **Prod**: `sincerelyhers` — account ID `<PROD-ACCOUNT-ID>`.
+- **Dev**: `sincerelyhers-dev` — account ID `<DEV-ACCOUNT-ID>`.
+- **Management**: `sincerelyhers-management` — account ID `<MGMT-ACCOUNT-ID>`.
 - **Access**: AWS IAM Identity Center; profiles `sincerelyhers-prod` and `sincerelyhers-dev` via `aws configure sso`.
 - **Historical IAM user**: `rarrington` in the prod account. Still present while Identity Center is being stood up; destination state is Identity Center only.
 - **Secrets Manager naming**: platform-specific; see each platform's CLAUDE.md. Amazon uses `sp-api/sincerely-services/{seller-alias}/credentials`.
