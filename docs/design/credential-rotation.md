@@ -68,11 +68,11 @@ For the first pass, plan around the documented UI-registration path and treat AP
 
 [`platforms/amazon/src/sincerelyhers_amazon/credentials.py:24`](../../platforms/amazon/src/sincerelyhers_amazon/credentials.py) shows each of the six per-seller secrets stores all three of `client_id`, `client_secret`, `refresh_token`. The first two are **app-level** and identical across all six secrets. That made onboarding simpler, but means a single rotation event has to fan out to six secret writes — and the prod `ProtectProductionSecrets` SCP makes that fan-out a privileged operation.
 
-**Proposed refactor (gated on this work landing) — see D2:**
+**Refactor — D2 resolved 2026-05-05 as Option A, trim-in-place:**
 
-- `sp-api/sincerely-services/app/credentials` — new, app-level: `{client_id, client_secret}`
-- `sp-api/sincerely-services/{alias}/refresh-token` — per-seller: `{refresh_token}` only
-- `credentials.py` reads both and merges before handing to `python-amazon-sp-api`.
+- New: `sp-api/sincerely-services/app/credentials` — app-level: `{client_id, client_secret}`. One secret, one write per rotation.
+- Existing per-seller `sp-api/sincerely-services/{alias}/credentials` are **trimmed in place** via `put-secret-value` to contain only `{refresh_token}`. No path renames; no new per-seller resources created (refresh tokens themselves stay valid — what SP-API formally calls a "secret" is `client_secret` paired with `client_id`, and that's what moves to the app-level secret; the refresh token is a per-seller authorization artifact that just stops carrying duplicated app-level fields).
+- `credentials.py` reads both secrets and merges before handing to `python-amazon-sp-api`.
 
 The rotation handler then writes **one** secret instead of six, and the SCP-protected write surface aligns with the actual rotation event.
 
@@ -115,15 +115,15 @@ Three Lambdas total — closely mirrors the existing `ReportRequester` / `Report
 
 ## Open decisions (D)
 
-1. **SCP carve-out vs `DeploymentRole` assumption.**
+1. **SCP carve-out vs `DeploymentRole` assumption.** *(Resolved 2026-05-05 as Option A.)*
    - Option A: Carve a tightly-scoped exception in `ProtectProductionSecrets` — allow `PutSecretValue` on `sp-api/sincerely-services/app/credentials` if the caller is `CredentialRotationProcessorRole`. Preserves the rest of the protection.
    - Option B: Have the processor assume `DeploymentRole`. Keeps the SCP clean but means a Lambda role can mint deploy-grade credentials, weakening `DeploymentRole`'s "only CloudFormation" intent.
-   - **Recommend A.** This is exactly the kind of narrow, audited carve-out SCPs are designed for.
+   - **Resolved A.** SCP edit lands with prod cutover, not the dev refactor.
 
-2. **Secret layout: refactor app-level vs leave per-seller-duplicated.**
-   - Option A: Refactor to `sp-api/sincerely-services/app/credentials` + `sp-api/sincerely-services/{alias}/refresh-token`. One secret rewrite per rotation. Aligns with reality (`client_secret` is app-scoped).
+2. **Secret layout: refactor app-level vs leave per-seller-duplicated.** *(Resolved 2026-05-05 as Option A, trim-in-place.)*
+   - Option A: Lift `client_id`/`client_secret` into a new `sp-api/sincerely-services/app/credentials`; trim each existing `sp-api/sincerely-services/{alias}/credentials` (via `put-secret-value`) to `{refresh_token}` only. One secret rewrite per rotation. Aligns with reality (`client_secret` is app-scoped).
    - Option B: Keep current layout, have the rotation processor write all six per-seller secrets atomically.
-   - **Recommend A.** B compounds the SCP write-surface and the onboarding script's per-seller fan-out; A pays the migration cost once.
+   - **Resolved A.** Implementation: see PR linked from issue #3. No new per-seller secret resources created; per-seller secret names stay as `{alias}/credentials`, just trimmed.
 
 3. **Rotation policy — what does `ExpiryHandler` do with an expiry warning?**
    - Option A: Auto-rotate immediately on every warning. Fully closed-loop; never a manual step.
@@ -131,8 +131,8 @@ Three Lambdas total — closely mirrors the existing `ReportRequester` / `Report
    - Option C: Always alert, never auto-rotate; rotations happen by manual `RotationRequester` invoke.
    - **Recommend A** once dev round-trip is trusted; **start at C** to validate the wiring without auto-firing the rotation API.
 
-4. **Multi-app reuse.**
-   Sincerely Services operates four SPP apps (Sincerely Services, SincerelySaaS, Dicksons SKU Checker, BobNathan-Test). Each has its own `client_secret` and its own pair of Developer Console preference rows. **Recommend** building for "Sincerely Services" only now, but parametrizing the Lambda's destination secret name so the same handler works for future apps.
+4. **Multi-app reuse.** *(Resolved 2026-05-05.)*
+   Sincerely Services operates four SPP apps (Sincerely Services, SincerelySaaS, Dicksons SKU Checker, BobNathan-Test). Per C1 resolution: Sincerely Services and Dicksons are active; Dicksons runs outside this monorepo today; SincerelySaaS and BobNathan-Test are not in use. **Build with `SECRETS_PREFIX` parametrized from day one** — required to use BobNathan-Test as the smoke-test sandbox before the first live rotation against Sincerely Services. Each app gets its own pair of Developer Console preference rows and its own queue pair (per D5).
 
 5. **One pair of queues per app, or shared?**
    Each SPP app has its own pair of Developer Console rows pointing at queue ARNs. We could give every app its own pair of queues, or have all apps point at one shared pair and branch on `notificationMetadata.applicationId` in the processor. **Recommend per-app queue pairs** — simpler IAM, simpler ops, and any future app rotation runs through its own DLQ rather than poisoning a shared one.
@@ -158,27 +158,57 @@ Three Lambdas total — closely mirrors the existing `ReportRequester` / `Report
 
 ---
 
-## Smoke-test path (mirrors how we validated reports)
+## Smoke-test path
 
-1. Refactor secret layout per D2 (split app-level secret out, update `credentials.py`, migrate the six dev secrets, redeploy). Verify all six sellers still succeed end-to-end before adding rotation.
-2. Add `sp-api-app-secret-expiry` and `sp-api-app-new-secret` SQS queues (each with DLQ), DDB `dev-amazon-rotation-events` table, and the three Lambdas to `platforms/amazon/template.yaml`. Deploy.
-3. In Developer Console → Sincerely Services app → Notification Preferences, register the two dev queue ARNs against their respective rows. Capture both `notificationType` enum strings and full payload examples — store in `platforms/amazon/CLAUDE.md` under environmental knowns.
-4. Manually invoke `RotationRequester` from dev.
-5. Verify: `sp-api-app-new-secret` receives a message → processor verifies + writes secret + DDB row + SES alert.
-6. Run `python-amazon-sp-api` against any seller (e.g. SH) using the rotated secret — confirm `getReportDocument` succeeds.
-7. Wait until the old-secret expiry stamp passes (7 days); confirm a forced call with the old secret fails. Optionally: confirm `APPLICATION_OAUTH_CLIENT_SECRET_EXPIRY` warnings arrived on the expiry queue during the 7-day window.
-8. Try `createSubscription` for both notification types (C5). Document the result.
+The `rotateApplicationClientSecret` API is operator-callable, rate-limited only at 1/min — we trigger rotations on our schedule rather than waiting for organic expiry. The bottleneck on iteration speed is the 7-day old-secret-expiry clock, which only matters if we want to fully observe the late-stage `APPLICATION_OAUTH_CLIENT_SECRET_EXPIRY` warnings.
+
+Three layers, in order of increasing fidelity:
+
+### Layer 1 — Synthetic SQS messages (consumer-side regression)
+
+Cheapest, fastest, repeatable. Hand-craft an SP-API notification envelope (the `notificationVersion` / `notificationType` / `payload` / `notificationMetadata` shape is documented), drop directly onto each queue via `aws sqs send-message`, watch the Lambda process it.
+
+**Covers:** payload parsing, DDB writes, SES alert formatting, fail-closed behavior on bad-secret verification, error/DLQ paths.
+
+**Doesn't cover:** the actual `rotateApplicationClientSecret` HTTP call, the cross-account SQS write from Amazon, the LWA token exchange against a real new secret, the actual "new secret" notification payload schema (which is TBD until first observed live).
+
+Good for ~80% of regression testing once the pipeline exists. Not a substitute for a live rotation.
+
+### Layer 2 — One controlled live rotation against BobNathan-Test (sandbox app)
+
+BobNathan-Test exists explicitly as a developer-test SPP app (per `platforms/amazon/CLAUDE.md` SP-API App Isolation). One-time setup: authorize it for any seller (SH works), drop creds in Secrets Manager under `sp-api/bobnathan-test/...`, point the rotation pipeline at it (via `SECRETS_PREFIX` env var per D4), then call `rotate`. Exercises the full producer→consumer loop end-to-end against an app that nothing depends on.
+
+The pipeline's `SECRETS_PREFIX` parametrization (see D4) is the enabling primitive — same handler code, different secret prefix, no cross-talk with the active Sincerely Services app.
+
+After one successful round-trip on BobNathan-Test, the next live rotation against Sincerely Services is rehearsed.
+
+### Layer 3 — Live rotation against Sincerely Services in dev
+
+What the original smoke-test path prescribed. Same code path as prod; captures the real `APPLICATION_OAUTH_CLIENT_SECRET_NEW_SECRET` (or whatever the production enum turns out to be) notification payload schema. Confirm any seller still succeeds with the rotated secret. Optionally wait the 7-day window to observe the late-stage expiry warnings.
+
+### Sequence (mirrors the build sequence below)
+
+1. Build the pipeline with `SECRETS_PREFIX` parametrized.
+2. Layer 1 in dev — synthetic messages cycle through both Lambdas; verify all happy and failure paths.
+3. Layer 2 — one live rotation against BobNathan-Test; capture real new-secret payload, update doc and tests.
+4. Layer 3 — one live rotation against Sincerely Services in dev. Verify any seller still succeeds.
+5. Try `createSubscription` for both notification types (C5). Document the result.
+6. Wait through the 7-day window to confirm late-stage expiry warnings arrive on the expiry queue (optional but completes the round-trip observation).
 
 ---
 
 ## Suggested build sequence
 
-1. Resolve D1 (SCP carve-out) and D2 (secret refactor) on paper. These set the IAM and storage shape everything else hangs on.
-2. Land the secret-layout refactor as a self-contained change. Verify all six sellers still succeed end-to-end.
-3. Add the two queues + DLQs + DDB table + three Lambdas to `platforms/amazon/template.yaml`.
-4. Register the two dev queues in SPP Developer Console (manual UI step). Capture the new-secret notification type name and payload schema.
-5. Smoke-test per the path above starting in policy mode C from D3 (alert-only, no auto-rotate). Once verified, graduate to A.
-6. Plan the prod cutover alongside the broader prod cutover already pending in `platforms/amazon/CLAUDE.md`.
+1. ~~Resolve D1 (SCP carve-out) and D2 (secret refactor) on paper.~~ **Done 2026-05-05** — see issue #3 Phase 1 comment.
+2. Land the secret-layout refactor as a self-contained change. Verify all six sellers still succeed end-to-end. **In progress.**
+3. Add the two queues + DLQs + DDB table + three Lambdas to `platforms/amazon/template.yaml`. Parametrize `SECRETS_PREFIX` per D4.
+4. Layer 1 smoke test — synthetic SQS messages exercise both Lambdas end-to-end through DDB and SES.
+5. Authorize BobNathan-Test, install creds under `sp-api/bobnathan-test/...`, register its dev queues in SPP Developer Console.
+6. Layer 2 smoke test — live rotation against BobNathan-Test. Capture the real new-secret notification payload; update tests + this doc with the actual schema.
+7. Register Sincerely Services dev queues in SPP Developer Console.
+8. Layer 3 smoke test — live rotation against Sincerely Services in dev. Verify any seller still succeeds with the rotated secret.
+9. Try `createSubscription` for both notification types (C5).
+10. Plan the prod cutover alongside the broader prod cutover already pending in `platforms/amazon/CLAUDE.md`. SCP amendment per D1 lands with prod cutover.
 
 ---
 

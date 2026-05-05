@@ -71,13 +71,41 @@ def test_handler_writes_dynamodb_row(aws, mock_reports):
     assert "requested_at" in item
 
 
-def test_handler_raises_on_missing_secret(aws, mock_reports):
+def test_handler_raises_on_missing_seller_secret(aws, mock_reports):
     from handlers.report_requester import lambda_handler
 
     bad_event = {**SAMPLE_EVENT, "seller_alias": "no-such-seller"}
 
     with pytest.raises(Exception):
         lambda_handler(bad_event, None)
+
+
+def test_handler_raises_on_missing_app_secret(mock_reports, monkeypatch):
+    """If the app-level credentials secret is missing, every seller fails fast
+    with the same ResourceNotFoundException — there's no fallback. Catches
+    bootstrap-order regressions where someone deletes app/credentials."""
+    import boto3
+    from moto import mock_aws
+
+    from handlers.report_requester import lambda_handler
+
+    with mock_aws():
+        # Seed only the seller secret, not the app secret.
+        ddb = boto3.resource("dynamodb", region_name="us-east-2")
+        ddb.create_table(
+            TableName=TABLE_NAME,
+            KeySchema=[{"AttributeName": "report_id", "KeyType": "HASH"}],
+            AttributeDefinitions=[{"AttributeName": "report_id", "AttributeType": "S"}],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        sm = boto3.client("secretsmanager", region_name="us-east-2")
+        sm.create_secret(
+            Name=f"sp-api/sincerely-services/{SELLER_ALIAS}/credentials",
+            SecretString='{"refresh_token": "Atzr|test-refresh-token"}',
+        )
+
+        with pytest.raises(Exception):
+            lambda_handler(SAMPLE_EVENT, None)
 
 
 def test_handler_extracts_event_fields(aws, mock_reports):

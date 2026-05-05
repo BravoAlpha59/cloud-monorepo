@@ -41,7 +41,12 @@ These are final. Do not re-open them.
 
 ## Secrets Manager Naming
 
-`sp-api/sincerely-services/{seller-alias}/credentials` — one secret per seller alias; stores refresh token and any per-seller credentials.
+Two secret paths under `sp-api/sincerely-services/`:
+
+- `app/credentials` — app-level, one secret per SPP app. `{client_id, client_secret}`. Rotated via the SP-API Application Management API (see [docs/design/credential-rotation.md](../../docs/design/credential-rotation.md)).
+- `{seller-alias}/credentials` — per-seller, one secret per onboarded seller. `{refresh_token}` only. Issued at SPP self-authorization time and replaced if the seller re-authorizes; not rotatable via API.
+
+The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`.
 
 ## First Milestone
 

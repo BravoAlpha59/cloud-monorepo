@@ -15,9 +15,11 @@ REGION = "us-east-2"
 SES_SENDER = "test-sender@example.com"
 SES_RECIPIENTS = "test-recipient@example.com"
 
-SECRET_PAYLOAD = {
+APP_SECRET_PAYLOAD = {
     "client_id": "amzn1.application-oa2-client.test",
     "client_secret": "test-client-secret",
+}
+SELLER_SECRET_PAYLOAD = {
     "refresh_token": "Atzr|test-refresh-token",
 }
 
@@ -51,8 +53,12 @@ def aws():
 
         sm = boto3.client("secretsmanager", region_name=REGION)
         sm.create_secret(
+            Name=f"{SECRETS_PREFIX}/app/credentials",
+            SecretString=json.dumps(APP_SECRET_PAYLOAD),
+        )
+        sm.create_secret(
             Name=f"{SECRETS_PREFIX}/{SELLER_ALIAS}/credentials",
-            SecretString=json.dumps(SECRET_PAYLOAD),
+            SecretString=json.dumps(SELLER_SECRET_PAYLOAD),
         )
 
         s3 = boto3.client("s3", region_name=REGION)

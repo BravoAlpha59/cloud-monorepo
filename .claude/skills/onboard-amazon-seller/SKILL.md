@@ -132,6 +132,8 @@ aws secretsmanager create-secret \
   --profile sincerelyhers-dev --region us-east-2
 ```
 
+Precondition: the app-level secret `sp-api/sincerely-services/app/credentials` (`{client_id, client_secret}`) must already exist. It's a one-time create per SPP app, not per seller — see `docs/design/credential-rotation.md` D2. Verify with `aws secretsmanager describe-secret --secret-id sp-api/sincerely-services/app/credentials` before adding new sellers.
+
 **c) Subscribe to REPORT_PROCESSING_FINISHED**:
 ```
 uv run python scripts/sp_api_notifications.py create-subscription <ALIAS> <destinationId>
