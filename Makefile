@@ -1,5 +1,9 @@
-.PHONY: deploy-base-dev deploy-base-prod \
+.PHONY: setup deploy-base-dev deploy-base-prod \
         build-amazon deploy-amazon-dev deploy-amazon-prod test-amazon
+
+# ---- Bootstrap ----
+setup:
+	uv sync --frozen --all-packages
 
 # ---- Base stack (cross-platform shared resources) ----
 deploy-base-dev:
