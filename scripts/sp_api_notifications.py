@@ -32,10 +32,27 @@ PAYLOAD_VERSION = "1.0"
 
 
 def _load_creds(seller_alias: str) -> dict:
+    """Read app-level + per-seller secrets and merge to one creds dict.
+
+    See ``platforms/amazon/src/sincerelyhers_amazon/credentials.py`` for the
+    matching read pattern used by the Lambda runtime. Keeps the script and
+    the runtime aligned on secret layout.
+    """
     prefix = os.environ.get("SECRETS_PREFIX", "sp-api/sincerely-services")
-    secret_id = f"{prefix}/{seller_alias}/credentials"
-    response = boto3.client("secretsmanager").get_secret_value(SecretId=secret_id)
-    return json.loads(response["SecretString"])
+    sm = boto3.client("secretsmanager")
+    app = json.loads(
+        sm.get_secret_value(SecretId=f"{prefix}/app/credentials")["SecretString"]
+    )
+    seller = json.loads(
+        sm.get_secret_value(SecretId=f"{prefix}/{seller_alias}/credentials")[
+            "SecretString"
+        ]
+    )
+    return {
+        "client_id": app["client_id"],
+        "client_secret": app["client_secret"],
+        "refresh_token": seller["refresh_token"],
+    }
 
 
 def _seller_access_token(seller_alias: str) -> str:
