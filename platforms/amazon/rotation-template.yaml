@@ -1,0 +1,397 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Amazon SP-API LWA client_secret rotation pipeline. Per-app stack —
+  deploy once per SPP app with distinct AppShortName + SecretsPrefix
+  parameters. Two SQS queues (expiry + new-secret), one DDB rotation-
+  events table, four Lambdas (ExpiryHandler, RotationRequester,
+  CredentialRotationProcessor, OldSecretMonitor). Full design and
+  decision history in docs/design/credential-rotation.md.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+  AppShortName:
+    Type: String
+    Description: >
+      Short alphanumeric identifier for the SPP app this stack manages
+      (e.g. "services" for Sincerely Services, "bobnathan" for
+      BobNathan-Test). Used in resource names so multiple per-app
+      stacks coexist.
+    AllowedPattern: "^[a-z0-9]+$"
+  SecretsPrefix:
+    Type: String
+    Description: >
+      Secrets Manager path prefix for this SPP app. The app-level
+      credentials live at "<prefix>/app/credentials" and are the
+      rotation target.
+    Default: sp-api/sincerely-services
+  BaseStackName:
+    Type: String
+    Default: sincerelyhers-base-dev
+    Description: Name of the cross-environment base stack whose SES sender we import.
+  NotificationRecipients:
+    Type: CommaDelimitedList
+    Default: rarrington@sincerelyhers.com
+    Description: Recipients of rotation alert emails. SES sandbox requires verified addresses.
+  ExpiryAlertHoursThreshold:
+    Type: Number
+    Default: 24
+    Description: OldSecretMonitor alerts when an old secret expires within this many hours.
+
+Globals:
+  Function:
+    Runtime: python3.14
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        APP_SHORT_NAME: !Ref AppShortName
+        SECRETS_PREFIX: !Ref SecretsPrefix
+        ROTATION_EVENTS_TABLE: !Ref RotationEventsTable
+        SES_SENDER_EMAIL:
+          Fn::ImportValue: !Sub "${BaseStackName}-SesSenderEmail"
+        SES_RECIPIENTS: !Join [",", !Ref NotificationRecipients]
+        EXPIRY_ALERT_HOURS: !Ref ExpiryAlertHoursThreshold
+
+Resources:
+  # ---- DynamoDB ----
+  RotationEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${Environment}-amazon-${AppShortName}-rotation-events"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: event_id
+          AttributeType: S
+        - AttributeName: app_short_name
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: event_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: by-app-and-time
+          KeySchema:
+            - AttributeName: app_short_name
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ---- SQS: expiry-warning queue ----
+  ExpiryDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-${AppShortName}-secret-expiry-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      SqsManagedSseEnabled: true
+
+  ExpiryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-${AppShortName}-secret-expiry"
+      VisibilityTimeout: 300  # 5 min — must exceed ExpiryHandler Timeout
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ExpiryDLQ.Arn
+        maxReceiveCount: 3
+
+  ExpiryQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ExpiryQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSPAPINotifications
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::437568002678:root"
+            Action: sqs:SendMessage
+            Resource: !GetAtt ExpiryQueue.Arn
+
+  # ---- SQS: new-secret queue ----
+  NewSecretDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-${AppShortName}-new-secret-dlq"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  NewSecretQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-${AppShortName}-new-secret"
+      VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NewSecretDLQ.Arn
+        maxReceiveCount: 3
+
+  NewSecretQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref NewSecretQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSPAPINotifications
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::437568002678:root"
+            Action: sqs:SendMessage
+            Resource: !GetAtt NewSecretQueue.Arn
+
+  # ---- IAM: ExpiryHandler ----
+  ExpiryHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-amazon-${AppShortName}-ExpiryHandlerRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SqsConsume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ExpiryQueue.Arn
+        - PolicyName: DynamoDBWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !GetAtt RotationEventsTable.Arn
+                  - !Sub "${RotationEventsTable.Arn}/index/*"
+        - PolicyName: SesSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
+
+  # ---- IAM: RotationRequester ----
+  RotationRequesterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-amazon-${AppShortName}-RotationRequesterRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/app/credentials*"
+        - PolicyName: DynamoDBWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt RotationEventsTable.Arn
+        - PolicyName: SesSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
+
+  # ---- IAM: CredentialRotationProcessor ----
+  # Holds PutSecretValue on app/credentials only — narrowest possible scope.
+  # The prod ProtectProductionSecrets SCP must be amended (D1) to allow this
+  # role's PutSecretValue on app/credentials before this stack deploys to prod.
+  CredentialRotationProcessorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-amazon-${AppShortName}-CredentialRotationProcessorRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SqsConsume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt NewSecretQueue.Arn
+        - PolicyName: SecretsManagerReadWriteAppOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:PutSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/app/credentials*"
+        - PolicyName: DynamoDBWrite
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt RotationEventsTable.Arn
+        - PolicyName: SesSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
+
+  # ---- IAM: OldSecretMonitor ----
+  OldSecretMonitorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-amazon-${AppShortName}-OldSecretMonitorRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBQuery
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt RotationEventsTable.Arn
+                  - !Sub "${RotationEventsTable.Arn}/index/*"
+        - PolicyName: SesSend
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource:
+                  Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
+
+  # ---- Lambdas ----
+  ExpiryHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-amazon-${AppShortName}-ExpiryHandler"
+      CodeUri: src/
+      Handler: handlers.expiry_handler.lambda_handler
+      Role: !GetAtt ExpiryHandlerRole.Arn
+      Events:
+        ExpiryNotification:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ExpiryQueue.Arn
+            BatchSize: 1
+
+  RotationRequesterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-amazon-${AppShortName}-RotationRequester"
+      CodeUri: src/
+      Handler: handlers.rotation_requester.lambda_handler
+      Role: !GetAtt RotationRequesterRole.Arn
+      # No event source — invoked manually via `aws lambda invoke` per
+      # D3 policy C (alert-only, no auto-rotate). When D3 graduates to A,
+      # add an EventBridge rule or wire ExpiryHandler to invoke it.
+
+  CredentialRotationProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-amazon-${AppShortName}-CredentialRotationProcessor"
+      CodeUri: src/
+      Handler: handlers.credential_rotation_processor.lambda_handler
+      Role: !GetAtt CredentialRotationProcessorRole.Arn
+      Timeout: 60
+      Events:
+        NewSecretNotification:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt NewSecretQueue.Arn
+            BatchSize: 1
+
+  OldSecretMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-amazon-${AppShortName}-OldSecretMonitor"
+      CodeUri: src/
+      Handler: handlers.old_secret_monitor.lambda_handler
+      Role: !GetAtt OldSecretMonitorRole.Arn
+      Events:
+        DailyCron:
+          Type: Schedule
+          Properties:
+            Name: !Sub "${Environment}-amazon-${AppShortName}-old-secret-monitor"
+            Description: !Sub "Daily check for ${AppShortName} old-secret expiry within ExpiryAlertHoursThreshold."
+            Schedule: "cron(0 13 * * ? *)"  # 13:00 UTC = ~9am ET; well after any rotation events
+            Enabled: true
+
+Outputs:
+  ExpiryQueueArn:
+    Description: ARN to register in SPP Developer Console as the "Application Client Secret Expiry" destination.
+    Value: !GetAtt ExpiryQueue.Arn
+  NewSecretQueueArn:
+    Description: ARN to register in SPP Developer Console as the "Application Client New Secret" destination.
+    Value: !GetAtt NewSecretQueue.Arn
+  RotationEventsTableName:
+    Description: Name of the DynamoDB rotation-events table.
+    Value: !Ref RotationEventsTable
+  RotationRequesterFunctionName:
+    Description: Lambda to invoke manually to trigger a rotation.
+    Value: !Ref RotationRequesterFunction

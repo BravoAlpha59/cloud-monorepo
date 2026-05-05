@@ -1,5 +1,8 @@
 .PHONY: setup deploy-base-dev deploy-base-prod \
-        build-amazon deploy-amazon-dev deploy-amazon-prod test-amazon
+        build-amazon deploy-amazon-dev deploy-amazon-prod test-amazon \
+        build-rotation \
+        deploy-rotation-services-dev deploy-rotation-bobnathan-dev \
+        deploy-rotation-services-prod
 
 # ---- Bootstrap ----
 setup:
@@ -68,3 +71,52 @@ deploy-amazon-prod: build-amazon
 
 test-amazon:
 	uv run pytest platforms/amazon/tests/ -v
+
+# ---- Amazon rotation pipeline (per-app stack, deployed once per SPP app) ----
+# Build artifacts go to .aws-sam/rotation-build to coexist with the main
+# amazon stack's .aws-sam/build (sam defaults to /build, so we override).
+build-rotation:
+	uv export --frozen --no-dev --no-emit-workspace --package sincerelyhers-amazon \
+		--output-file platforms/amazon/src/requirements.txt
+	sam build --template platforms/amazon/rotation-template.yaml \
+		--build-dir .aws-sam/rotation-build --use-container
+
+deploy-rotation-services-dev: build-rotation
+	sam deploy --template .aws-sam/rotation-build/template.yaml \
+		--stack-name sincerelyhers-amazon-rotation-services-dev \
+		--profile sincerelyhers-dev \
+		--region us-east-2 \
+		--parameter-overrides Environment=dev AppShortName=services SecretsPrefix=sp-api/sincerely-services BaseStackName=sincerelyhers-base-dev \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--resolve-s3
+
+deploy-rotation-bobnathan-dev: build-rotation
+	sam deploy --template .aws-sam/rotation-build/template.yaml \
+		--stack-name sincerelyhers-amazon-rotation-bobnathan-dev \
+		--profile sincerelyhers-dev \
+		--region us-east-2 \
+		--parameter-overrides Environment=dev AppShortName=bobnathan SecretsPrefix=sp-api/bobnathan-test BaseStackName=sincerelyhers-base-dev \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--resolve-s3
+
+deploy-rotation-services-prod: build-rotation
+	@test -n "$$PROD_ACCOUNT_ID" || (echo "ERROR: PROD_ACCOUNT_ID not set. 'source .identifiers.local' (or export it manually) and retry." && exit 1)
+	@echo ""
+	@echo "WARNING: About to deploy ROTATION pipeline (Sincerely Services) to PROD (account $$PROD_ACCOUNT_ID)."
+	@echo "  Stack:   sincerelyhers-amazon-rotation-services-prod"
+	@echo "  Role:    arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole"
+	@echo ""
+	@echo "Precondition: ProtectProductionSecrets SCP must be amended (D1) to allow"
+	@echo "  PutSecretValue on app/credentials by CredentialRotationProcessorRole."
+	@echo "  This stack will deploy regardless, but the processor Lambda will fail"
+	@echo "  on PutSecretValue at runtime until the SCP carve-out lands."
+	@echo ""
+	@bash -c 'read -p "Type '\''deploy prod'\'' to continue: " confirm && [ "$$confirm" = "deploy prod" ] || (echo "Aborted." && exit 1)'
+	sam deploy --template .aws-sam/rotation-build/template.yaml \
+		--stack-name sincerelyhers-amazon-rotation-services-prod \
+		--profile sincerelyhers-prod \
+		--role-arn arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole \
+		--region us-east-2 \
+		--parameter-overrides Environment=prod AppShortName=services SecretsPrefix=sp-api/sincerely-services BaseStackName=sincerelyhers-base-prod \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--resolve-s3
