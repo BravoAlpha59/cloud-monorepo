@@ -33,7 +33,7 @@ These are final. Do not re-open them.
 
 - **App type**: private (Sincerely Services internal; not listed on the Appstore).
 - **App name**: Sincerely Services
-- **Client ID (LWA)**: `amzn1.application-oa2-client.a1629a9bab0447f582fe24db574c17f6` — stored in Secrets Manager, never in code or config.
+- **Client ID (LWA)**: `<LWA-CLIENT-ID>` — literal value lives in `.identifiers.local` (gitignored) and in each per-seller secret in Secrets Manager; never embedded in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
 - **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev with all six rules currently `DISABLED` (SH/KK post-shake-out per commit 8f2a059; LLG/73J/OH/CO post-3-day-trial 2026-05-04, with trial S3 + DDB data deleted). Re-enable when prod cutover begins.
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
@@ -58,12 +58,12 @@ Out of scope for this milestone and still pending:
 These exist in Amazon's SP-API infrastructure, attached to the Sincerely Services app, and are **not managed by this codebase**. Recorded here so they don't get rediscovered later as surprises.
 
 - **Active `createReportSchedule` rule** (discovered 2026-04-21 via `getReportSchedules`):
-  - `reportScheduleId = 50024019947`
+  - `reportScheduleId = <EXTERNAL-REPORT-SCHEDULE-ID>` (literal in `.identifiers.local`)
   - `reportType = GET_FBA_MYI_UNSUPPRESSED_INVENTORY_DATA`
   - `period = PT4H`, `marketplaceIds = [ATVPDKIKX0DER]`
   - Origin unknown — predates this monorepo.
-- **External integration in account `637445353164` (prod)** is actively using the Sincerely Services app with SH's credentials. Evidence:
-  - Pre-existing notification destination `SH-OrderChange-Queue` (destinationId `6f5f7648-a6d5-41cc-8916-7c470f48c22c`) points at an `OrderChangesQueue` in that account.
+- **External integration in the prod account (`<PROD-ACCOUNT-ID>`)** is actively using the Sincerely Services app with SH's credentials. Evidence:
+  - Pre-existing notification destination `SH-OrderChange-Queue` (destinationId `<EXTERNAL-DESTINATION-ID>`, literal in `.identifiers.local`) points at an `OrderChangesQueue` in that account.
   - 24h `getReports` audit shows ~30 `GET_FBA_MYI_UNSUPPRESSED_INVENTORY_DATA` and ~4 `GET_FLAT_FILE_OPEN_LISTINGS_DATA` reports per day that this monorepo did not request, at a cadence higher than the PT4H schedule would produce (implies direct `createReport` calls from that integration in addition to the schedule).
   - That integration does **not** appear to use SP-API Notifications — our `REPORT_PROCESSING_FINISHED` subscription succeeded at creation time, and SP-API allows only one subscription per `(seller × app × notificationType)`, so no prior subscription existed. It likely polls `getReports` to discover completed reports.
 - **Runtime consequence**: every report the external integration requests via the Sincerely Services app for SH produces a `REPORT_PROCESSING_FINISHED` event that Amazon routes to our `sp-api-report-ready` queue, regardless of which tool issued the underlying `createReport`. `ReportProcessor` catches the `KeyError` from `dynamodb.get_job` on these unknown report_ids, emits a `WARN` log, and drops the SQS message — no DDB write, no S3 write, no email. Expect roughly 30 such skips per day in dev. SQS costs are trivial (<$0.01/mo at that volume).

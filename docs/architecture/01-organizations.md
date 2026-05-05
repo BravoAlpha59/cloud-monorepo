@@ -8,19 +8,19 @@ OU IDs (referenced by the diagram below):
 
 | OU | ID | Status |
 |---|---|---|
-| `sincerelyhers-internal` | `ou-b2n7-hyxkrhhl` | live — holds prod and dev |
-| `sincerelyhers-saas` | `ou-b2n7-1t37srxw` | reserved — empty, future SincerelySaaS workloads |
+| `sincerelyhers-internal` | `<INTERNAL-OU-ID>` | live — holds prod and dev |
+| `sincerelyhers-saas` | `<SAAS-OU-ID>` | reserved — empty, future SincerelySaaS workloads |
 
 ```mermaid
 flowchart TD
-    Root(["AWS Organization Root<br/>o-kx9xl1ypyl  •  r-b2n7"])
+    Root(["AWS Organization Root<br/>&lt;ORG-ID&gt;  •  &lt;ORG-ROOT-ID&gt;"])
 
-    Mgmt["sincerelyhers-management<br/>504804196123<br/>aws-mgmt@sincerelyhers.com<br/><br/>billing, SCP authority,<br/>Identity Center tenant<br/>(no workloads)"]
+    Mgmt["sincerelyhers-management<br/>&lt;MGMT-ACCOUNT-ID&gt;<br/>aws-mgmt@sincerelyhers.com<br/><br/>billing, SCP authority,<br/>Identity Center tenant<br/>(no workloads)"]
 
     subgraph InternalOU["OU: sincerelyhers-internal"]
       direction LR
-      Prod["sincerelyhers (PROD)<br/>637445353164<br/>rarrington@sincerelyhers.com"]
-      Dev["sincerelyhers-dev (DEV)<br/>431412299701<br/>aws-dev@sincerelyhers.com"]
+      Prod["sincerelyhers (PROD)<br/>&lt;PROD-ACCOUNT-ID&gt;<br/>rarrington@sincerelyhers.com"]
+      Dev["sincerelyhers-dev (DEV)<br/>&lt;DEV-ACCOUNT-ID&gt;<br/>aws-dev@sincerelyhers.com"]
     end
 
     subgraph SaasOU["OU: sincerelyhers-saas (reserved)"]

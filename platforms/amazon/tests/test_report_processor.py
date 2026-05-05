@@ -42,7 +42,7 @@ def _sqs_event(notification: dict) -> dict:
                 "messageId": "test-message-id",
                 "body": json.dumps(body),
                 "eventSource": "aws:sqs",
-                "eventSourceARN": "arn:aws:sqs:us-east-2:431412299701:dev-sp-api-report-ready",
+                "eventSourceARN": "arn:aws:sqs:us-east-2:123456789012:dev-sp-api-report-ready",
                 "awsRegion": "us-east-2",
             }
         ]

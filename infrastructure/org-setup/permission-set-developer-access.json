@@ -106,7 +106,7 @@
       "Sid": "PassDeploymentRoleToCloudFormation",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::637445353164:role/DeploymentRole",
+      "Resource": "arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": "cloudformation.amazonaws.com"

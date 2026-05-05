@@ -10,20 +10,20 @@ Visual overview: [docs/architecture/01-organizations.md](../../docs/architecture
 
 ### Applied
 
-- **Organization**: `o-kx9xl1ypyl`
-- **Root**: `r-b2n7`
-- **Management**: `sincerelyhers-management` — `504804196123` (aws-mgmt@sincerelyhers.com)
+- **Organization**: `<ORG-ID>`
+- **Root**: `<ORG-ROOT-ID>`
+- **Management**: `sincerelyhers-management` — `<MGMT-ACCOUNT-ID>` (aws-mgmt@sincerelyhers.com)
 - **OUs**:
-  - `sincerelyhers-internal` — `ou-b2n7-hyxkrhhl`
-  - `sincerelyhers-saas` — `ou-b2n7-1t37srxw` (empty; reserved)
+  - `sincerelyhers-internal` — `<INTERNAL-OU-ID>`
+  - `sincerelyhers-saas` — `<SAAS-OU-ID>` (empty; reserved)
 - **Member accounts, both in `sincerelyhers-internal`**:
-  - `sincerelyhers` — `637445353164` (rarrington@sincerelyhers.com) — PROD, joined 2026/04/17
-  - `sincerelyhers-dev` — `431412299701` (aws-dev@sincerelyhers.com) — DEV, created 2026/04/21
+  - `sincerelyhers` — `<PROD-ACCOUNT-ID>` (rarrington@sincerelyhers.com) — PROD, joined 2026/04/17
+  - `sincerelyhers-dev` — `<DEV-ACCOUNT-ID>` (aws-dev@sincerelyhers.com) — DEV, created 2026/04/21
 - **SCPs attached to `sincerelyhers-internal`**: `RegionLockdown`, `ProtectCloudTrail` (alongside inherited `FullAWSAccess`).
 - **SCP attached to `sincerelyhers` (prod) account**: `ProtectProductionSecrets`.
 - **DeploymentRole deployed in both accounts** (CloudFormation stack `DeploymentRole`, same template):
-  - Prod: `arn:aws:iam::637445353164:role/DeploymentRole` — bootstrapped 2026-04-21 via the rarrington IAM user + console upload (had to precede the `ProtectProductionSecrets` SCP attachment).
-  - Dev: `arn:aws:iam::431412299701:role/DeploymentRole` — deployed 2026-04-25 via `aws cloudformation deploy --profile sincerelyhers-dev` (AdministratorAccess SSO). Optional in dev (no SCP forces its use), but kept for command-shape symmetry with prod.
+  - Prod: `arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole` — bootstrapped 2026-04-21 via the rarrington IAM user + console upload (had to precede the `ProtectProductionSecrets` SCP attachment).
+  - Dev: `arn:aws:iam::<DEV-ACCOUNT-ID>:role/DeploymentRole` — deployed 2026-04-25 via `aws cloudformation deploy --profile sincerelyhers-dev` (AdministratorAccess SSO). Optional in dev (no SCP forces its use), but kept for command-shape symmetry with prod.
 - **IAM Identity Center** (region `us-east-2`): permission sets `AdministratorAccess` (AWS managed), `DeveloperAccess` (custom, from `permission-set-developer-access.json`), `ReadOnlyAccess` (AWS managed). Assignments: `sincerelyhers-dev` → AdministratorAccess; `sincerelyhers` (prod) → DeveloperAccess + ReadOnlyAccess; `sincerelyhers-management` → ReadOnlyAccess.
 - **SSO profiles on WSL2** (all four share a single `sincerelyhers-sso` session block in `~/.aws/config`):
   - `sincerelyhers-prod` (DeveloperAccess) and `sincerelyhers-dev` (AdministratorAccess) — verified via `aws sts get-caller-identity` on 2026-04-21.
@@ -31,14 +31,14 @@ Visual overview: [docs/architecture/01-organizations.md](../../docs/architecture
   - `sincerelyhers-mgmt` (ReadOnlyAccess on `sincerelyhers-management`) — added 2026-04-25; verified by calling `organizations:ListAccounts` (a management-only API). Use for org/SSO audit APIs not callable from member accounts.
 - **IAM billing access** activated in each member account root on 2026-04-25 (Phase 8). Cost Explorer enabled in `sincerelyhers-management` on the same date.
 - **CloudTrail trails** (Phase 9, both created 2026-04-25, both multi-region with global service events, management Read+Write only, no data/insights events):
-  - Dev: `sincerelyhers-dev-cloudtrail` → `aws-cloudtrail-logs-431412299701-a27454e3`. Log file validation **off** (the trail was created via the CloudTrail Dashboard quickstart by mistake; the `ProtectCloudTrail` SCP blocks `UpdateTrail` so this can't be flipped on without a temporary SCP detach — not worth the gymnastics).
-  - Prod: `sincerelyhers-prod-cloudtrail` → `aws-cloudtrail-logs-637445353164-e3ea1f92`. Log file validation **on**. Created via the legacy `rarrington` IAM user because `DeveloperAccess` is read-only on CloudTrail and `ReadOnlyAccess` can't write either.
+  - Dev: `sincerelyhers-dev-cloudtrail` → `aws-cloudtrail-logs-<DEV-ACCOUNT-ID>-<DEV-CT-BUCKET-SUFFIX>`. Log file validation **off** (the trail was created via the CloudTrail Dashboard quickstart by mistake; the `ProtectCloudTrail` SCP blocks `UpdateTrail` so this can't be flipped on without a temporary SCP detach — not worth the gymnastics).
+  - Prod: `sincerelyhers-prod-cloudtrail` → `aws-cloudtrail-logs-<PROD-ACCOUNT-ID>-<PROD-CT-BUCKET-SUFFIX>`. Log file validation **on**. Created via the legacy `rarrington` IAM user because `DeveloperAccess` is read-only on CloudTrail and `ReadOnlyAccess` can't write either.
 
 ### Phases to execute
 
 1. ~~Create the management account (new root email).~~ **Done.**
 2. ~~Enable AWS Organizations — **all features** mode (required for SCPs).~~ **Done.**
-3. ~~Invite `sincerelyhers` (`637445353164`) as a member account.~~ **Done.**
+3. ~~Invite `sincerelyhers` (`<PROD-ACCOUNT-ID>`) as a member account.~~ **Done.**
 4. ~~Create OUs: `sincerelyhers-internal`, `sincerelyhers-saas`.~~ **Done.**
 5. ~~Create `sincerelyhers-dev` account under Organizations. Move both member accounts into `sincerelyhers-internal`.~~ **Done.**
 6. ~~Enable and attach SCPs (RegionLockdown + ProtectCloudTrail on `sincerelyhers-internal`; ProtectProductionSecrets on prod after DeploymentRole bootstrap).~~ **Done.**
@@ -54,9 +54,9 @@ Day-to-day access is via `aws configure sso` using the Identity Center portal UR
 
 ## SCP definitions
 
-- [`scp-region-lockdown.json`](scp-region-lockdown.json) — **attached** to `sincerelyhers-internal` OU (`ou-b2n7-hyxkrhhl`). Denies every action whose `aws:RequestedRegion` is not `us-east-2` or `us-east-1`, except for callers assuming `OrganizationAccountAccessRole`.
+- [`scp-region-lockdown.json`](scp-region-lockdown.json) — **attached** to `sincerelyhers-internal` OU (`<INTERNAL-OU-ID>`). Denies every action whose `aws:RequestedRegion` is not `us-east-2` or `us-east-1`, except for callers assuming `OrganizationAccountAccessRole`.
 - [`scp-protect-cloudtrail.json`](scp-protect-cloudtrail.json) — **attached** to `sincerelyhers-internal` OU. Denies `cloudtrail:StopLogging`, `DeleteTrail`, `UpdateTrail` for every principal, including admins.
-- [`scp-protect-production-secrets.json`](scp-protect-production-secrets.json) — **attached** to `sincerelyhers` prod account (`637445353164`) only. Denies Secrets Manager writes on `sp-api/*` except when the caller is `arn:aws:iam::637445353164:role/DeploymentRole`.
+- [`scp-protect-production-secrets.json`](scp-protect-production-secrets.json) — **attached** to `sincerelyhers` prod account (`<PROD-ACCOUNT-ID>`) only. Denies Secrets Manager writes on `sp-api/*` except when the caller is `arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole`.
 
 When attaching in the console, leave the default `FullAWSAccess` policy attached alongside these — SCPs are deny-only, and removing `FullAWSAccess` turns the attachment into an allowlist (which is not what we want).
 
@@ -88,13 +88,13 @@ When attaching in the console, leave the default `FullAWSAccess` policy attached
    sam deploy \
      --template platforms/amazon/template.yaml \
      --stack-name sincerelyhers-amazon-prod \
-     --role-arn arn:aws:iam::637445353164:role/DeploymentRole \
+     --role-arn arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole \
      --profile sincerelyhers-prod \
      --capabilities CAPABILITY_IAM \
      --resolve-s3
    ```
 
-Deploying the same template in dev (`431412299701`) is optional but recommended for consistency — the `ProtectProductionSecrets` SCP does not apply there, so dev also works without a service role, but keeping the `sam deploy` invocation shape identical across envs avoids foot-guns.
+Deploying the same template in dev (`<DEV-ACCOUNT-ID>`) is optional but recommended for consistency — the `ProtectProductionSecrets` SCP does not apply there, so dev also works without a service role, but keeping the `sam deploy` invocation shape identical across envs avoids foot-guns.
 
 ## Identity Center permission sets (Phase 7)
 
@@ -114,7 +114,7 @@ The custom policy is intentionally lean. What it grants:
 - **`lambda:InvokeFunction`** on any Lambda — lets the developer manually trigger functions for smoke-testing without needing EventBridge.
 - **`cloudformation:*Stack*` / `*ChangeSet*`** so `sam deploy` works.
 - **`s3:*` scoped to `aws-sam-cli-managed-*`** — enough for SAM's deployment bucket (created on first `sam deploy --resolve-s3`) without granting bucket access elsewhere.
-- **`iam:PassRole`** narrowed to `arn:aws:iam::637445353164:role/DeploymentRole` *and* `iam:PassedToService = cloudformation.amazonaws.com` — the developer can hand DeploymentRole to CFN during deploy but cannot pass it to any other service (e.g., cannot assume-role-via-Lambda).
+- **`iam:PassRole`** narrowed to `arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole` *and* `iam:PassedToService = cloudformation.amazonaws.com` — the developer can hand DeploymentRole to CFN during deploy but cannot pass it to any other service (e.g., cannot assume-role-via-Lambda).
 
 What it deliberately **does not** grant:
 
@@ -141,10 +141,10 @@ From the `sincerelyhers-management` account:
    - `sincerelyhers-dev` → assign your user → `AdministratorAccess`.
 5. **Settings → Access portal URL** — capture the `https://d-xxxxxxxxxx.awsapps.com/start` URL. Bookmark it; it's the single sign-in point from now on.
 6. On WSL2: run `aws configure sso` twice to create named profiles:
-   - `sincerelyhers-prod` (account `637445353164`, role `DeveloperAccess`)
-   - `sincerelyhers-dev` (account `431412299701`, role `AdministratorAccess`)
+   - `sincerelyhers-prod` (account `<PROD-ACCOUNT-ID>`, role `DeveloperAccess`)
+   - `sincerelyhers-dev` (account `<DEV-ACCOUNT-ID>`, role `AdministratorAccess`)
 
-After step 6, `sam deploy --profile sincerelyhers-prod --role-arn arn:aws:iam::637445353164:role/DeploymentRole ...` should work end to end and rarrington CLI use ends.
+After step 6, `sam deploy --profile sincerelyhers-prod --role-arn arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole ...` should work end to end and rarrington CLI use ends.
 
 ## Still to be added here
 

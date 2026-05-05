@@ -4,7 +4,7 @@ Usage (set AWS_PROFILE first, e.g. `export AWS_PROFILE=sincerelyhers-dev`):
 
     uv run python scripts/sp_api_notifications.py list-destinations
     uv run python scripts/sp_api_notifications.py create-destination \\
-        dev-sp-api-report-ready arn:aws:sqs:us-east-2:431412299701:dev-sp-api-report-ready
+        dev-sp-api-report-ready arn:aws:sqs:us-east-2:<DEV-ACCOUNT-ID>:dev-sp-api-report-ready
     uv run python scripts/sp_api_notifications.py show-subscription SH
     uv run python scripts/sp_api_notifications.py create-subscription SH <destination-id>
 

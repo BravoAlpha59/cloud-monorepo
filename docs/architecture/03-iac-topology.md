@@ -9,7 +9,7 @@ Cross-cutting AWS resources live in a **base stack** deployed once per environme
 ```mermaid
 %%{init: { 'flowchart': { 'subGraphTitleMargin': { 'top': 12, 'bottom': 8 } } }}%%
 flowchart TD
-    subgraph dev_account["sincerelyhers-dev (431412299701)"]
+    subgraph dev_account["sincerelyhers-dev (&lt;DEV-ACCOUNT-ID&gt;)"]
       direction TB
       subgraph base_dev["sincerelyhers-base-dev"]
         S3dev[("ReportsBucket<br/>sincerelyhers-reports-dev<br/>+ lifecycle: 30d→IA, 90d→Glacier")]
@@ -23,7 +23,7 @@ flowchart TD
       end
     end
 
-    subgraph prod_account["sincerelyhers (PROD, 637445353164)"]
+    subgraph prod_account["sincerelyhers (PROD, &lt;PROD-ACCOUNT-ID&gt;)"]
       direction TB
       subgraph base_prod["sincerelyhers-base-prod"]
         S3prod[("ReportsBucket<br/>sincerelyhers-reports-prod")]
@@ -86,7 +86,7 @@ Order matters in step 1: `uv export --frozen --no-dev` produces a per-Lambda `re
 
 ## DeploymentRole — why and how
 
-In **prod**, the `ProtectProductionSecrets` SCP denies `secretsmanager:Put/Update/DeleteSecret` on `sp-api/*` for *every* principal except `arn:aws:iam::637445353164:role/DeploymentRole`. So `sam deploy` has to use it as the CloudFormation service role:
+In **prod**, the `ProtectProductionSecrets` SCP denies `secretsmanager:Put/Update/DeleteSecret` on `sp-api/*` for *every* principal except `arn:aws:iam::<PROD-ACCOUNT-ID>:role/DeploymentRole`. So `sam deploy` has to use it as the CloudFormation service role:
 
 ```mermaid
 sequenceDiagram
