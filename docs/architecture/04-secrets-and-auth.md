@@ -23,12 +23,13 @@ flowchart TD
     SM["AWS Secrets Manager<br/>(account-scoped)"]
 
     subgraph SS["sp-api/sincerely-services/*"]
-      SH["SH/credentials"]
-      KK["KK/credentials"]
-      LLG["LLG/credentials"]
-      J73["73J/credentials"]
-      OH["OH/credentials"]
-      CO["CO/credentials"]
+      App["app/credentials<br/>{client_id, client_secret}"]
+      SH["SH/credentials<br/>{refresh_token}"]
+      KK["KK/credentials<br/>{refresh_token}"]
+      LLG["LLG/credentials<br/>{refresh_token}"]
+      J73["73J/credentials<br/>{refresh_token}"]
+      OH["OH/credentials<br/>{refresh_token}"]
+      CO["CO/credentials<br/>{refresh_token}"]
     end
 
     subgraph FUTURE["sp-api/sincerely-saas/*"]
@@ -49,22 +50,31 @@ flowchart TD
     SM -. "future" .-> FUTURE3
 
     classDef live fill:#dcfce7,stroke:#16a34a,color:#000
+    classDef app fill:#fef3c7,stroke:#d97706,color:#000
     classDef future fill:#e5e7eb,stroke:#6b7280,color:#000
+    class App app
     class SH,KK,LLG,J73,OH,CO live
     class Saas,Dick,Bn future
 ```
 
-## Per-seller secret shape
+## Secret shape — two paths
 
-Each seller's secret at `sp-api/sincerely-services/{alias}/credentials` is a JSON blob with three fields:
+Two secrets under each SPP-app prefix. The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`.
 
-| Key | Per | Source |
-|---|---|---|
-| `client_id` | App | LWA OAuth identifier issued by Amazon when the SPP app was created — same for every seller |
-| `client_secret` | App | LWA OAuth secret issued at app creation — same for every seller |
-| `refresh_token` | Seller | Returned at the end of the seller's "self-authorize" flow against the Sincerely Services SPP app — unique per seller |
+**App-level secret** at `sp-api/sincerely-services/app/credentials`:
 
-`client_id` + `client_secret` are duplicated into every per-seller secret rather than living in a separate "app-level" secret. Slightly redundant; intentional — each seller's secret is fully self-contained, no second `GetSecretValue` round-trip at runtime, no app-level secret to forget about during onboarding.
+| Key | Source |
+|---|---|
+| `client_id` | LWA OAuth identifier issued by Amazon when the SPP app was created — same for every seller |
+| `client_secret` | LWA OAuth secret issued at app creation — same for every seller; rotatable via SP-API Application Management API |
+
+**Per-seller secret** at `sp-api/sincerely-services/{alias}/credentials`:
+
+| Key | Source |
+|---|---|
+| `refresh_token` | Returned at the end of the seller's "self-authorize" flow against the Sincerely Services SPP app — unique per seller |
+
+This split was introduced 2026-05-05 ([credential-rotation.md D2](../design/credential-rotation.md)). The previous layout duplicated `client_id` and `client_secret` across every per-seller secret, which forced any rotation event to fan out to one write per seller and put six secrets under the prod SCP write surface. With `client_secret` lifted to a single app-level secret, rotation writes once and the `ProtectProductionSecrets` SCP carve-out (D1) only needs to allow `PutSecretValue` on `app/credentials`.
 
 ## Lambda execution role scoping
 
