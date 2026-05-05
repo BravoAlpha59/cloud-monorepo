@@ -125,23 +125,23 @@ Three Lambdas total — closely mirrors the existing `ReportRequester` / `Report
    - Option B: Keep current layout, have the rotation processor write all six per-seller secrets atomically.
    - **Resolved A.** Implementation: see PR linked from issue #3. No new per-seller secret resources created; per-seller secret names stay as `{alias}/credentials`, just trimmed.
 
-3. **Rotation policy — what does `ExpiryHandler` do with an expiry warning?**
+3. **Rotation policy — what does `ExpiryHandler` do with an expiry warning?** *(Resolved 2026-05-05 as Option C; graduate to A after multiple successful manual rotations.)*
    - Option A: Auto-rotate immediately on every warning. Fully closed-loop; never a manual step.
    - Option B: Auto-rotate only when `clientSecretExpiryReason` indicates Amazon-forced rotation; for periodic warnings, alert and let an operator decide.
    - Option C: Always alert, never auto-rotate; rotations happen by manual `RotationRequester` invoke.
-   - **Recommend A** once dev round-trip is trusted; **start at C** to validate the wiring without auto-firing the rotation API.
+   - **Resolved C.** ExpiryHandler logs the event to DynamoDB and emits an SES alert quoting the `aws lambda invoke` command for RotationRequester. No auto-rotation in current code; graduating to A is a one-line change to the handler once we've watched 3–4 manual cycles complete cleanly.
 
 4. **Multi-app reuse.** *(Resolved 2026-05-05.)*
    Sincerely Services operates four SPP apps (Sincerely Services, SincerelySaaS, Dicksons SKU Checker, BobNathan-Test). Per C1 resolution: Sincerely Services and Dicksons are active; Dicksons runs outside this monorepo today; SincerelySaaS and BobNathan-Test are not in use. **Build with `SECRETS_PREFIX` parametrized from day one** — required to use BobNathan-Test as the smoke-test sandbox before the first live rotation against Sincerely Services. Each app gets its own pair of Developer Console preference rows and its own queue pair (per D5).
 
-5. **One pair of queues per app, or shared?**
-   Each SPP app has its own pair of Developer Console rows pointing at queue ARNs. We could give every app its own pair of queues, or have all apps point at one shared pair and branch on `notificationMetadata.applicationId` in the processor. **Recommend per-app queue pairs** — simpler IAM, simpler ops, and any future app rotation runs through its own DLQ rather than poisoning a shared one.
+5. **One pair of queues per app, or shared?** *(Resolved 2026-05-05 as Option A — per-app queue pairs.)*
+   Each SPP app has its own pair of Developer Console rows pointing at queue ARNs. We could give every app its own pair of queues, or have all apps point at one shared pair and branch on `notificationMetadata.applicationId` in the processor. **Resolved A — per-app queue pairs.** Implementation: `platforms/amazon/rotation-template.yaml` is parametrized by `AppShortName` + `SecretsPrefix` and deployed once per SPP app (`sincerelyhers-amazon-rotation-services-dev`, `sincerelyhers-amazon-rotation-bobnathan-dev`).
 
-6. **Verification before promotion.**
-   The `CredentialRotationProcessor` should exchange the new `client_secret` for an LWA token *before* writing it to Secrets Manager — fail-closed. If the new secret doesn't work, keep the old one, alert, and DLQ. Write-then-verify is unsafe (callers using the secret between write and verify could fail). **Recommend** verify-then-write.
+6. **Verification before promotion.** *(Resolved 2026-05-05 as verify-then-write.)*
+   The `CredentialRotationProcessor` should exchange the new `client_secret` for an LWA token *before* writing it to Secrets Manager — fail-closed. If the new secret doesn't work, keep the old one, alert, and DLQ. Write-then-verify is unsafe (callers using the secret between write and verify could fail). **Resolved verify-then-write.** Implementation: the processor calls `grantless_access_token(new_secret)` and only proceeds to `PutSecretValue` if it succeeds; failure raises and the SQS message redrives toward the DLQ with the old secret intact.
 
-7. **Old-secret overlap window monitoring.**
-   The 7-day overlap is real but tight. Record the old-secret expiry timestamp in DynamoDB and emit an alert when ≤ 24h remains. Catches integrations that didn't pick up the new secret before the cliff.
+7. **Old-secret overlap window monitoring.** *(Resolved 2026-05-05 with 24h default threshold.)*
+   The 7-day overlap is real but tight. Record the old-secret expiry timestamp in DynamoDB and emit an alert when ≤ 24h remains. Catches integrations that didn't pick up the new secret before the cliff. **Implemented as `OldSecretMonitor` Lambda — daily EventBridge cron, queries the rotation-events table by app, alerts on `ROTATION_COMPLETED` rows whose `old_secret_expires_at` is within `ExpiryAlertHoursThreshold` (default 24h, parametrized).**
 
 8. **Unsolicited rotations.**
    Rotation notifications can fire without us calling `rotateApplicationClientSecret` (e.g. Amazon force-rotates a compromised secret). The processor must handle either origin identically — design already does, but make it explicit in code comments and tests.
@@ -201,7 +201,7 @@ What the original smoke-test path prescribed. Same code path as prod; captures t
 
 1. ~~Resolve D1 (SCP carve-out) and D2 (secret refactor) on paper.~~ **Done 2026-05-05** — see issue #3 Phase 1 comment.
 2. Land the secret-layout refactor as a self-contained change. Verify all six sellers still succeed end-to-end. **In progress.**
-3. Add the two queues + DLQs + DDB table + three Lambdas to `platforms/amazon/template.yaml`. Parametrize `SECRETS_PREFIX` per D4.
+3. ~~Add the two queues + DLQs + DDB table + three Lambdas to `platforms/amazon/template.yaml`. Parametrize `SECRETS_PREFIX` per D4.~~ **Done 2026-05-05** as `platforms/amazon/rotation-template.yaml` (separate stack per D5; four Lambdas including `OldSecretMonitor` per D7). Deployed via `make deploy-rotation-services-dev` and `make deploy-rotation-bobnathan-dev`.
 4. Layer 1 smoke test — synthetic SQS messages exercise both Lambdas end-to-end through DDB and SES.
 5. Authorize BobNathan-Test, install creds under `sp-api/bobnathan-test/...`, register its dev queues in SPP Developer Console.
 6. Layer 2 smoke test — live rotation against BobNathan-Test. Capture the real new-secret notification payload; update tests + this doc with the actual schema.
