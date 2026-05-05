@@ -68,7 +68,9 @@ def send_report_ready(
         },
     )
     message_id = response["MessageId"]
-    logger.info("Sent report-ready email for %s (SES MessageId %s)", report_id, message_id)
+    logger.info(
+        "Sent report-ready email for %s (SES MessageId %s)", report_id, message_id
+    )
     return message_id
 
 

@@ -90,9 +90,7 @@ def test_happy_path_writes_s3_and_marks_completed(aws, mock_fetch):
     assert job["status"] == "COMPLETED"
     assert job["document_id"] == DOCUMENT_ID
     assert "completed_at" in job
-    expected_prefix = (
-        f"amazon/sincerely-services/{SELLER_ALIAS}/{REPORT_TYPE}/"
-    )
+    expected_prefix = f"amazon/sincerely-services/{SELLER_ALIAS}/{REPORT_TYPE}/"
     assert job["s3_key"].startswith(expected_prefix)
     assert job["s3_key"].endswith(f"{REPORT_ID}.tsv")
 
@@ -105,7 +103,9 @@ def test_happy_path_sends_ses_email(aws, mock_fetch, mocker):
     from handlers.report_processor import lambda_handler
 
     spy = mocker.spy(
-        __import__("handlers.report_processor", fromlist=["notifications"]).notifications,
+        __import__(
+            "handlers.report_processor", fromlist=["notifications"]
+        ).notifications,
         "send_report_ready",
     )
     _seed_job()
@@ -223,8 +223,12 @@ def test_unknown_report_is_skipped_not_failed(aws, mock_fetch):
     lambda_handler(_sqs_event(_notification()), None)
 
     mock_fetch.assert_not_called()
-    response = boto3.resource("dynamodb", region_name="us-east-2").Table(TABLE_NAME).get_item(
-        Key={"report_id": REPORT_ID},
+    response = (
+        boto3.resource("dynamodb", region_name="us-east-2")
+        .Table(TABLE_NAME)
+        .get_item(
+            Key={"report_id": REPORT_ID},
+        )
     )
     assert "Item" not in response
 
