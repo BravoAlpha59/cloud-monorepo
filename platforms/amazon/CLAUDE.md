@@ -41,12 +41,16 @@ These are final. Do not re-open them.
 
 ## Secrets Manager Naming
 
-Two secret paths under `sp-api/sincerely-services/`:
+Two secret paths under `sp-api/{app-prefix}/`:
 
 - `app/credentials` — app-level, one secret per SPP app. `{client_id, client_secret}`. Rotated via the SP-API Application Management API (see [docs/design/credential-rotation.md](../../docs/design/credential-rotation.md)).
 - `{seller-alias}/credentials` — per-seller, one secret per onboarded seller. `{refresh_token}` only. Issued at SPP self-authorization time and replaced if the seller re-authorizes; not rotatable via API.
 
-The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`.
+The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`. App prefixes in use today: `sp-api/sincerely-services/` (live), `sp-api/bobnathan-test/` (sandbox for rotation smoke testing — only `app/credentials` populated).
+
+## Credential rotation pipeline
+
+A second SAM stack ([`rotation-template.yaml`](rotation-template.yaml)) deploys per-app rotation infrastructure: two SQS queues + DLQs (expiry, new-secret), a DynamoDB rotation-events table, and four Lambdas (`ExpiryHandler`, `RotationRequester`, `CredentialRotationProcessor`, `OldSecretMonitor`). Deployed once per SPP app via `make deploy-rotation-services-dev` and `make deploy-rotation-bobnathan-dev`. Design rationale, decision history, and smoke-test plan in [docs/design/credential-rotation.md](../../docs/design/credential-rotation.md). D3 currently policy C (alert-only); operator triggers rotation by `aws lambda invoke` of `RotationRequester`. D6 verify-then-write enforced in `CredentialRotationProcessor`; D7 daily monitoring via `OldSecretMonitor`.
 
 ## First Milestone
 
