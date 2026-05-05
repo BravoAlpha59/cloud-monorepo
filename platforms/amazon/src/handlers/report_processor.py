@@ -27,7 +27,9 @@ def lambda_handler(event: dict, context: object) -> None:
                 "FAILED",
                 error_message=f"SP-API processing status = {processing_status}",
             )
-            logger.warning("Report %s not DONE (%s); marked FAILED", report_id, processing_status)
+            logger.warning(
+                "Report %s not DONE (%s); marked FAILED", report_id, processing_status
+            )
             continue
 
         if not document_id:
@@ -89,7 +91,9 @@ def _process_one(report_id: str, document_id: str) -> None:
             report_size_bytes=len(raw),
         )
     except Exception:
-        logger.exception("SES notification failed for %s; job still COMPLETED", report_id)
+        logger.exception(
+            "SES notification failed for %s; job still COMPLETED", report_id
+        )
 
 
 def _s3_key(
@@ -104,7 +108,9 @@ def _s3_key(
 
 
 def _extension_for_report_type(report_type: str) -> str:
-    if report_type.startswith("GET_FLAT_FILE_") or report_type.startswith("GET_FBA_MYI_"):
+    if report_type.startswith("GET_FLAT_FILE_") or report_type.startswith(
+        "GET_FBA_MYI_"
+    ):
         return "tsv"
     if report_type.startswith("GET_XML_"):
         return "xml"

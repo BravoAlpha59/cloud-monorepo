@@ -71,11 +71,15 @@ def _grantless_access_token(seller_alias: str) -> str:
     return response.json()["access_token"]
 
 
-def _sp_api(method: str, path: str, access_token: str, body: dict = None) -> httpx.Response:
+def _sp_api(
+    method: str, path: str, access_token: str, body: dict = None
+) -> httpx.Response:
     headers = {"x-amz-access-token": access_token, "accept": "application/json"}
     if body is not None:
         headers["content-type"] = "application/json"
-    return httpx.request(method, f"{SP_API_ENDPOINT}{path}", headers=headers, json=body, timeout=30.0)
+    return httpx.request(
+        method, f"{SP_API_ENDPOINT}{path}", headers=headers, json=body, timeout=30.0
+    )
 
 
 def _emit(response: httpx.Response) -> None:
@@ -94,42 +98,72 @@ def list_destinations(args) -> None:
 
 def create_destination(args) -> None:
     token = _grantless_access_token(args.seller_alias)
-    body = {"name": args.name, "resourceSpecification": {"sqs": {"arn": args.queue_arn}}}
+    body = {
+        "name": args.name,
+        "resourceSpecification": {"sqs": {"arn": args.queue_arn}},
+    }
     _emit(_sp_api("POST", "/notifications/v1/destinations", token, body))
 
 
 def show_subscription(args) -> None:
     token = _seller_access_token(args.seller_alias)
-    _emit(_sp_api("GET", f"/notifications/v1/subscriptions/{args.notification_type}", token))
+    _emit(
+        _sp_api(
+            "GET", f"/notifications/v1/subscriptions/{args.notification_type}", token
+        )
+    )
 
 
 def create_subscription(args) -> None:
     token = _seller_access_token(args.seller_alias)
     body = {"payloadVersion": PAYLOAD_VERSION, "destinationId": args.destination_id}
-    _emit(_sp_api("POST", f"/notifications/v1/subscriptions/{args.notification_type}", token, body))
+    _emit(
+        _sp_api(
+            "POST",
+            f"/notifications/v1/subscriptions/{args.notification_type}",
+            token,
+            body,
+        )
+    )
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="SP-API Notifications bootstrap")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("list-destinations", help="List destinations registered for this SPP app.")
-    p.add_argument("--seller-alias", default="SH",
-                   help="Seller whose secret supplies app creds (client_id/client_secret). Default: SH.")
+    p = sub.add_parser(
+        "list-destinations", help="List destinations registered for this SPP app."
+    )
+    p.add_argument(
+        "--seller-alias",
+        default="SH",
+        help="Seller whose secret supplies app creds (client_id/client_secret). Default: SH.",
+    )
     p.set_defaults(func=list_destinations)
 
-    p = sub.add_parser("create-destination", help="Create an SQS destination for the SPP app.")
+    p = sub.add_parser(
+        "create-destination", help="Create an SQS destination for the SPP app."
+    )
     p.add_argument("name", help="Human-readable name, e.g. dev-sp-api-report-ready.")
-    p.add_argument("queue_arn", help="ARN of the target SQS queue (must already allow SP-API SendMessage).")
+    p.add_argument(
+        "queue_arn",
+        help="ARN of the target SQS queue (must already allow SP-API SendMessage).",
+    )
     p.add_argument("--seller-alias", default="SH")
     p.set_defaults(func=create_destination)
 
-    p = sub.add_parser("show-subscription", help="Show a seller's subscription for one notification type.")
+    p = sub.add_parser(
+        "show-subscription",
+        help="Show a seller's subscription for one notification type.",
+    )
     p.add_argument("seller_alias")
     p.add_argument("notification_type", nargs="?", default="REPORT_PROCESSING_FINISHED")
     p.set_defaults(func=show_subscription)
 
-    p = sub.add_parser("create-subscription", help="Subscribe seller to a notification type via destination.")
+    p = sub.add_parser(
+        "create-subscription",
+        help="Subscribe seller to a notification type via destination.",
+    )
     p.add_argument("seller_alias")
     p.add_argument("destination_id")
     p.add_argument("notification_type", nargs="?", default="REPORT_PROCESSING_FINISHED")
