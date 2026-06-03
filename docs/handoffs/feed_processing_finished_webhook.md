@@ -116,25 +116,34 @@ Implemented in `platforms/amazon/`:
 - **Idempotency**: none on the relay side — Odoo de-dups on `feedId` via
   `_external_id_amazon_feed_status`.
 
-### Operator onboarding steps (per environment)
+### Operator onboarding steps
 
-1. **Stage each seller's webhook secret as a local file** in the gitignored `secrets/`
+Three independent pieces have to land for traffic to flow: the **platform stack**
+(queue + Lambda + IAM, via `sam deploy`), the **per-seller secrets** (Secrets Manager),
+and the **SP-API subscriptions** (one destination + one subscription per seller).
+The stack and secrets can land in either order; subscriptions come last because they
+require the queue ARN.
+
+#### Dev path
+
+1. **Deploy the platform stack** — creates the queue, DLQ, IAM role, and Lambda:
+   ```
+   make deploy-amazon-dev
+   ```
+2. **Stage each seller's webhook secret** as a local file in the gitignored `secrets/`
    directory, named to match the Odoo URL path component:
    `secrets/amazon-feed-{alias-lower}.json` (e.g. `secrets/amazon-feed-kk.json`),
    shape `{"secret": "...", "url": "https://<odoo-host>/webhook/amazon-feed-kk",
    "seller_id": "A1ABCDEFG"}`.
-2. **Create the AWS secret** (dev):
+3. **Create the AWS secrets** (one per seller; dev account permits direct CLI writes):
    ```
    aws secretsmanager create-secret \
      --profile sincerelyhers-dev --region us-east-2 \
      --name sp-api/sincerely-services/KK/webhooks/amazon-feed \
      --secret-string file://secrets/amazon-feed-kk.json
    ```
-   For prod, declare each secret in `template.yaml` with a `NoEcho` SAM parameter and
-   pass values via `sam deploy --parameter-overrides` under `DeploymentRole` (required by
-   the `ProtectProductionSecrets` SCP).
-3. **Deploy**: `make deploy-amazon-dev` (or `-prod`).
-4. **Subscribe SP-API to the destination** (once per environment, then once per seller):
+4. **Subscribe SP-API to the destination** (`create-destination` once, then
+   `create-subscription` per seller):
    ```
    uv run python scripts/sp_api_notifications.py create-destination \
        dev-sp-api-feed-ready arn:aws:sqs:us-east-2:<DEV-ACCOUNT-ID>:dev-sp-api-feed-ready
@@ -143,6 +152,21 @@ Implemented in `platforms/amazon/`:
    uv run python scripts/sp_api_notifications.py create-subscription CO  <destination-id> FEED_PROCESSING_FINISHED
    ```
 5. **Delete the local `secrets/*.json` files** after the AWS secrets are created.
+
+#### Prod path
+
+Same three pieces, but the `ProtectProductionSecrets` SCP blocks Step 3's direct CLI
+write — only `DeploymentRole` can write `sp-api/*` secrets in prod. Workarounds:
+
+- Steps 1 + 4 are unchanged (use `make deploy-amazon-prod` and the prod queue ARN /
+  `sincerelyhers-prod` SSO profile).
+- Step 3 in prod: declare each secret as an `AWS::SecretsManager::Secret` resource in
+  `platforms/amazon/template.yaml` with `SecretString` interpolating a SAM parameter
+  marked `NoEcho: true`. Pass values via
+  `sam deploy --role-arn arn:aws:iam::<PROD>:role/DeploymentRole --parameter-overrides
+  "KKWebhookJson=$(cat secrets/amazon-feed-kk.json)" ...`. The deploy itself satisfies
+  the SCP (DeploymentRole is the principal); `NoEcho` keeps the values out of
+  `describe-stacks` / `describe-stack-events`.
 
 ## Testing
 
