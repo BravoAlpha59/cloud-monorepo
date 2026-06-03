@@ -31,3 +31,6 @@ docs/chat-summaries/
 .env
 .envrc
 .identifiers.local
+
+# secrets
+secrets/

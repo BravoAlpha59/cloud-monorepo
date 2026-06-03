@@ -26,6 +26,15 @@ Parameters:
       email delivery from ReportProcessor; set to an empty value to
       disable without code changes. In SES sandbox mode, every address
       here must already be verified in SES.
+  WebhookSellerAliases:
+    Type: CommaDelimitedList
+    Default: KK,LLG,CO
+    Description: >
+      Sellers whose FEED_PROCESSING_FINISHED notifications relay to
+      Odoo. Each alias must have a secret at
+      sp-api/sincerely-services/{alias}/webhooks/amazon-feed shaped
+      {secret, url, seller_id}. Adding an alias here without the
+      corresponding secret will fail the relay at first invocation.
 
 Globals:
   Function:
@@ -80,6 +89,38 @@ Resources:
               AWS: "arn:aws:iam::437568002678:root"
             Action: sqs:SendMessage
             Resource: !GetAtt ReportReadyQueue.Arn
+
+  FeedReadyDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-feed-ready-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      SqsManagedSseEnabled: true
+
+  FeedReadyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-feed-ready"
+      VisibilityTimeout: 90  # must exceed FeedRelay Timeout
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FeedReadyDLQ.Arn
+        maxReceiveCount: 3
+
+  FeedReadyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref FeedReadyQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSPAPINotifications
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::437568002678:root"
+            Action: sqs:SendMessage
+            Resource: !GetAtt FeedReadyQueue.Arn
 
   # ---- IAM: ReportRequester ----
   ReportRequesterExecutionRole:
@@ -177,6 +218,49 @@ Resources:
                 Resource:
                   Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
 
+  # ---- IAM: FeedRelay ----
+  FeedRelayExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-FeedRelayRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/*"
+        - PolicyName: SqsConsume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt FeedReadyQueue.Arn
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: SincerelyHers/AmazonRelay
+
   # ---- Lambda: ReportRequester ----
   ReportRequesterFunction:
     Type: AWS::Serverless::Function
@@ -214,6 +298,26 @@ Resources:
           Type: SQS
           Properties:
             Queue: !GetAtt ReportReadyQueue.Arn
+            BatchSize: 1
+
+  # ---- Lambda: FeedRelay ----
+  FeedRelayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-FeedRelay"
+      CodeUri: src/
+      Handler: handlers.feed_relay.lambda_handler
+      Role: !GetAtt FeedRelayExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          SECRETS_PREFIX: !Ref SecretsPrefix
+          WEBHOOK_SELLER_ALIASES: !Join [",", !Ref WebhookSellerAliases]
+      Events:
+        FeedReady:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt FeedReadyQueue.Arn
             BatchSize: 1
 
   # ---- EventBridge ----
@@ -389,3 +493,12 @@ Outputs:
   ReportJobsTableName:
     Description: Name of the DynamoDB report-jobs table
     Value: !Ref AmazonReportJobsTable
+  FeedRelayFunctionArn:
+    Description: ARN of the FeedRelay Lambda
+    Value: !GetAtt FeedRelayFunction.Arn
+  FeedReadyQueueArn:
+    Description: ARN of the sp-api-feed-ready queue (subscribe SP-API FEED_PROCESSING_FINISHED notifications here).
+    Value: !GetAtt FeedReadyQueue.Arn
+  FeedReadyDLQArn:
+    Description: ARN of the DLQ for sp-api-feed-ready.
+    Value: !GetAtt FeedReadyDLQ.Arn
