@@ -35,30 +35,6 @@ Parameters:
       sp-api/sincerely-services/{alias}/webhooks/amazon-feed shaped
       {secret, url, seller_id}. Adding an alias here without the
       corresponding secret will fail the relay at first invocation.
-  KKWebhookJson:
-    Type: String
-    NoEcho: true
-    Default: ""
-    Description: >
-      Prod only. JSON {secret, url, seller_id} for KK's amazon-feed
-      webhook, written to Secrets Manager by DeploymentRole at deploy
-      time (the ProtectProductionSecrets SCP forbids CLI writes to
-      sp-api/*). Supplied by `make deploy-amazon-prod` from
-      secrets/amazon-feed-kk.json. Unused when Environment=dev — dev
-      secrets are created directly via the CLI (see the handoff doc).
-  LLGWebhookJson:
-    Type: String
-    NoEcho: true
-    Default: ""
-    Description: Prod only. As KKWebhookJson, for LLG.
-  COWebhookJson:
-    Type: String
-    NoEcho: true
-    Default: ""
-    Description: Prod only. As KKWebhookJson, for CO.
-
-Conditions:
-  IsProd: !Equals [!Ref Environment, prod]
 
 Globals:
   Function:
@@ -241,56 +217,6 @@ Resources:
                 Action: ses:SendEmail
                 Resource:
                   Fn::ImportValue: !Sub "${BaseStackName}-SesSenderIdentityArn"
-
-  # ---- Secrets: Odoo webhook config (prod only) ----
-  # In dev these are created directly via `aws secretsmanager create-secret`
-  # (the handoff doc's Dev path). In prod the ProtectProductionSecrets SCP
-  # forbids CLI writes to sp-api/*, so each secret is born from this
-  # DeploymentRole-driven deploy; values arrive as NoEcho parameters and
-  # the relay Lambda reads them at runtime by name. Retain on delete so a
-  # stack teardown never nukes a live prod secret.
-  KKWebhookSecret:
-    Type: AWS::SecretsManager::Secret
-    Condition: IsProd
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Metadata:
-      cfn-lint:
-        config:
-          ignore_checks:
-            - W1030  # empty Default is unused: IsProd gates the resource and prod always supplies a value
-    Properties:
-      Name: !Sub "${SecretsPrefix}/KK/webhooks/amazon-feed"
-      Description: KK FEED_PROCESSING_FINISHED Odoo relay config {secret, url, seller_id}.
-      SecretString: !Ref KKWebhookJson
-  LLGWebhookSecret:
-    Type: AWS::SecretsManager::Secret
-    Condition: IsProd
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Metadata:
-      cfn-lint:
-        config:
-          ignore_checks:
-            - W1030  # empty Default is unused: IsProd gates the resource and prod always supplies a value
-    Properties:
-      Name: !Sub "${SecretsPrefix}/LLG/webhooks/amazon-feed"
-      Description: LLG FEED_PROCESSING_FINISHED Odoo relay config {secret, url, seller_id}.
-      SecretString: !Ref LLGWebhookJson
-  COWebhookSecret:
-    Type: AWS::SecretsManager::Secret
-    Condition: IsProd
-    DeletionPolicy: Retain
-    UpdateReplacePolicy: Retain
-    Metadata:
-      cfn-lint:
-        config:
-          ignore_checks:
-            - W1030  # empty Default is unused: IsProd gates the resource and prod always supplies a value
-    Properties:
-      Name: !Sub "${SecretsPrefix}/CO/webhooks/amazon-feed"
-      Description: CO FEED_PROCESSING_FINISHED Odoo relay config {secret, url, seller_id}.
-      SecretString: !Ref COWebhookJson
 
   # ---- IAM: FeedRelay ----
   FeedRelayExecutionRole:

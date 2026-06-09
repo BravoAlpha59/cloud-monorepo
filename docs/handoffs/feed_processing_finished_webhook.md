@@ -160,24 +160,25 @@ direct CLI write — only `DeploymentRole` can write `sp-api/*` secrets in prod.
 prod the secrets are **CloudFormation-managed** instead: the deploy itself (running as
 `DeploymentRole`) is what writes them.
 
-This is already wired up — no manual `aws secretsmanager` calls in prod:
+This is already wired up — no manual `aws secretsmanager` calls in prod. The webhook
+secrets live in the dedicated secrets stack alongside the SP-API credentials (so all
+secret values flow through one JSON-safe deploy path), **not** in the platform stack:
 
-1. **Deploy + secrets in one step.** `template.yaml` declares three
-   `AWS::SecretsManager::Secret` resources (`KKWebhookSecret` / `LLGWebhookSecret` /
-   `COWebhookSecret`), each gated on `Condition: IsProd`, `DeletionPolicy: Retain`, named
-   `${SecretsPrefix}/{alias}/webhooks/amazon-feed`, with `SecretString` fed from a
-   `NoEcho` parameter. `make deploy-amazon-prod` reads `secrets/amazon-feed-{kk,llg,co}.json`
-   and passes them as those parameters (and refuses to run if any of the three files is
-   missing). `NoEcho` keeps the values out of `describe-stacks` / `describe-stack-events`.
-2. **Secrets are re-supplied on every prod deploy** (the chosen lifecycle): keep the three
-   `secrets/*.json` files staged locally — gitignored — for as long as the prod stack is
-   maintained. CloudFormation no-ops when a value is unchanged, so routine redeploys are
-   idempotent; to **rotate** a secret, edit the file and redeploy. `Retain` means a stack
-   teardown never deletes a live secret.
-3. **Steps 1 + 4 of the Dev path otherwise apply** — `make deploy-amazon-prod` (prompts to
-   confirm, assumes `DeploymentRole`, needs `PROD_ACCOUNT_ID` from `.identifiers.local`),
-   then the SP-API `create-destination` / `create-subscription` calls against the **prod**
-   queue ARN on the `sincerelyhers-prod` SSO profile.
+1. **`make deploy-amazon-secrets-prod`** (Phase 2 of the cutover) declares the three
+   `AWS::SecretsManager::Secret` resources in
+   [`secrets-template.yaml`](../../platforms/amazon/secrets-template.yaml) (`Retain`, named
+   `${SecretsPrefix}/{alias}/webhooks/amazon-feed`) alongside the credential secrets, and
+   deploys them via `aws cloudformation deploy --parameter-overrides file://…`. It does
+   **not** use `sam deploy` — samcli's parameter parser corrupts JSON values. The values
+   come from `secrets/amazon-feed-{kk,llg,co}.json` via `scripts/build_cfn_params.py`.
+2. **`make deploy-amazon-prod`** (Phase 3) deploys the relay Lambda + queue, which read
+   those secrets by name at runtime. It carries no secret material.
+3. **Then** the SP-API `create-destination` / `create-subscription` calls against the
+   **prod** queue ARN on the `sincerelyhers-prod` SSO profile.
+
+See [`amazon-prod-cutover.md`](amazon-prod-cutover.md) for the full sequenced runbook
+(including the one-time permission-set update that lets the operator read secrets and
+upload Lambda artifacts in locked-down prod).
 
 Two prod prerequisites that differ from dev:
 
