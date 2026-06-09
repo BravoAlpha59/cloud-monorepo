@@ -1,5 +1,6 @@
 .PHONY: setup deploy-base-dev deploy-base-prod \
         build-amazon deploy-amazon-dev deploy-amazon-prod test-amazon \
+        deploy-amazon-secrets-prod \
         build-rotation \
         deploy-rotation-services-dev deploy-rotation-bobnathan-dev \
         deploy-rotation-services-prod
@@ -68,6 +69,37 @@ deploy-amazon-prod: build-amazon
 		--region us-east-2 \
 		--parameter-overrides Environment=prod BaseStackName=sincerelyhers-base-prod \
 		--capabilities CAPABILITY_NAMED_IAM \
+		--resolve-s3
+
+# Prod SP-API credential bootstrap (app + per-seller refresh tokens).
+# No build step — pure CloudFormation. Deployed rarely; see
+# docs/handoffs/amazon-prod-cutover.md. Dev creds are CLI-created, so
+# there is intentionally no -dev counterpart.
+deploy-amazon-secrets-prod:
+	@test -n "$$PROD_ACCOUNT_ID" || (echo "ERROR: PROD_ACCOUNT_ID not set. 'source .identifiers.local' (or export it manually) and retry." && exit 1)
+	@test -f secrets/app-credentials.json || (echo "ERROR: secrets/app-credentials.json missing — stage {client_id, client_secret} before deploying." && exit 1)
+	@for a in kk llg co; do test -f secrets/credentials-$$a.json || (echo "ERROR: secrets/credentials-$$a.json missing — stage {refresh_token} before deploying." && exit 1); done
+	@echo ""
+	@echo "WARNING: About to deploy SP-API credential secrets to PROD (account $$PROD_ACCOUNT_ID)."
+	@echo "  Stack:   sincerelyhers-amazon-secrets-prod"
+	@echo "  Role:    arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole"
+	@echo ""
+	@echo "Deployed rarely (bootstrap / re-key / seller re-auth). Once the prod"
+	@echo "  rotation pipeline is live, do NOT redeploy without the CURRENT"
+	@echo "  app/credentials value or it will clobber the rotated secret."
+	@echo ""
+	@bash -c 'read -p "Type '\''deploy prod'\'' to continue: " confirm && [ "$$confirm" = "deploy prod" ] || (echo "Aborted." && exit 1)'
+	sam deploy --template platforms/amazon/secrets-template.yaml \
+		--stack-name sincerelyhers-amazon-secrets-prod \
+		--profile sincerelyhers-prod \
+		--role-arn arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole \
+		--region us-east-2 \
+		--parameter-overrides \
+			SecretsPrefix=sp-api/sincerely-services \
+			"AppCredentialsJson=$$(tr -d '\n\r' < secrets/app-credentials.json)" \
+			"KKCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-kk.json)" \
+			"LLGCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-llg.json)" \
+			"COCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-co.json)" \
 		--resolve-s3
 
 test-amazon:

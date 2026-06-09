@@ -48,6 +48,8 @@ Two secret paths under `sp-api/{app-prefix}/`:
 
 The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`. App prefixes in use today: `sp-api/sincerely-services/` (live), `sp-api/bobnathan-test/` (sandbox for rotation smoke testing — only `app/credentials` populated).
 
+In **dev** these credential secrets are created directly via the CLI. In **prod** the `ProtectProductionSecrets` SCP forbids CLI writes, so `app/credentials` + per-seller `credentials` are bootstrapped from a `DeploymentRole` deploy of [`secrets-template.yaml`](secrets-template.yaml) (`make deploy-amazon-secrets-prod`), a deliberately separate, rarely-deployed stack. Full prod sequence: [docs/handoffs/amazon-prod-cutover.md](../../docs/handoffs/amazon-prod-cutover.md).
+
 ### Odoo-webhook secrets (notification relay pattern)
 
 For SP-API notifications relayed to Odoo webhooks (first instance: `FEED_PROCESSING_FINISHED` → `amazon_feed_status`), each seller has one secret per notification domain:
