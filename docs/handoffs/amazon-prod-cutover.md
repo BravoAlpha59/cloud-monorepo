@@ -34,11 +34,19 @@ stand up the whole prod Amazon foundation; the feed relay rides Phases 3–5.
   |---|---|---|
   | `secrets/app-credentials.json` | `{client_id, client_secret}` | Phase 2 (secrets stack) |
   | `secrets/credentials-{kk,llg,co}.json` | `{refresh_token}` | Phase 2 (secrets stack) |
-  | `secrets/amazon-feed-{kk,llg,co}.json` | `{secret, url, seller_id}` | Phase 3 (platform stack) |
+  | `secrets/amazon-feed-{kk,llg,co}.json` | `{secret, url, seller_id}` | Phase 2 (secrets stack) |
 
   The refresh tokens are the same values used in dev (authorization is Amazon-side; the
   tokens are account-independent). **Fix `secrets/amazon-feed-kk.json` `url`** — it was
   still an ngrok tunnel; it must be the prod Odoo host like CO/LLG.
+- **Apply the DeveloperAccess permission-set update** (one-time, from the management
+  account). [`permission-set-developer-access.json`](../../infrastructure/org-setup/permission-set-developer-access.json)
+  adds `s3:PutObject` on `sincerelyhers-deploy-artifacts-*` (Phase 3 Lambda upload) and
+  `secretsmanager:GetSecretValue` on `sp-api/sincerely-services/*` (so the operator can
+  verify secrets and run the Phase 4 subscription script — which reads them). Push it with
+  `aws sso-admin put-inline-policy-to-permission-set` + `provision-permission-set` on the
+  `sincerelyhers-mgmt` profile. Without it: Phase 3 fails on artifact upload and Phase 4
+  fails to read credentials.
 
 ## Phase 1 — Base stack · **[operator]**
 
@@ -57,17 +65,25 @@ triggers a verification email to `rarrington@sincerelyhers.com` — click it. SE
 > SSO identity, which is intentionally not permitted to manage S3 in locked-down prod. So
 > base must deploy before the credential/platform stacks.
 
-## Phase 2 — SP-API credential bootstrap · **[operator]**
+## Phase 2 — SP-API secrets · **[operator]**
 
 ```
 source .identifiers.local && make deploy-amazon-secrets-prod
 ```
 
 Deploys [`platforms/amazon/secrets-template.yaml`](../../platforms/amazon/secrets-template.yaml)
-under `DeploymentRole`: `app/credentials` + per-seller `credentials` for KK/LLG/CO, each
-`Retain`-protected. Deployed *rarely* — bootstrap, re-key, or seller re-authorization —
-which is why it is a separate stack from the frequently-redeployed platform stack (routine
-code deploys never need this secret material on disk).
+under `DeploymentRole` — **all seven prod secrets**: `app/credentials`, per-seller
+`credentials` (KK/LLG/CO), and per-seller `webhooks/amazon-feed` (KK/LLG/CO), each
+`Retain`-protected. Deployed *rarely* — bootstrap, re-key, re-authorization, or
+webhook-secret rotation — which is why it is a separate stack from the frequently-redeployed
+platform stack (routine code deploys never need this secret material on disk).
+
+> **Deploy mechanism:** this target uses `aws cloudformation deploy --parameter-overrides
+> file://…`, **not** `sam deploy` — samcli's parameter parser corrupts JSON values (it
+> truncates `{"a":"b"}` to `{`). [`scripts/build_cfn_params.py`](../../scripts/build_cfn_params.py)
+> generates a gitignored params file from the staged secret files (validating each is JSON)
+> and the recipe deletes it afterward. The webhook secrets live here, **not** in the
+> platform stack, precisely so all secret values flow through this JSON-safe path.
 
 **Rotation-drift caveat:** once the prod credential-rotation pipeline is live (the D1 SCP
 carve-out per [credential-rotation.md](../design/credential-rotation.md)), the
@@ -84,11 +100,12 @@ Merge the feed-relay PR to `main` first, then:
 source .identifiers.local && make deploy-amazon-prod
 ```
 
-Stands up the queue/DLQ, `FeedRelay` Lambda + IAM, and the three webhook secrets
-(`{alias}/webhooks/amazon-feed`, supplied from the `secrets/amazon-feed-*.json` files on
-every prod deploy — keep them staged). `ReportRequester` / `ReportProcessor` deploy too
-but stay idle: the report EventBridge rule ships `DISABLED` and no report subscriptions
-exist. Requires the Phase 1 base exports.
+Stands up the queue/DLQ, `FeedRelay` Lambda + IAM. The webhook secrets it reads at runtime
+were already created in Phase 2, so this stack carries **no** secret material and deploys
+with plain `sam deploy` (simple params only). `ReportRequester` / `ReportProcessor` deploy
+too but stay idle: the report EventBridge rule ships `DISABLED` and no report subscriptions
+exist. Requires the Phase 1 base exports and the Phase 0 permission-set update (for the
+Lambda artifact upload to `sincerelyhers-deploy-artifacts-prod`).
 
 ## Phase 4 — SP-API feed subscriptions · **[operator]**
 

@@ -103,6 +103,22 @@
       ]
     },
     {
+      "Sid": "UploadDeployArtifacts",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:AbortMultipartUpload",
+        "s3:PutObjectTagging"
+      ],
+      "Resource": "arn:aws:s3:::sincerelyhers-deploy-artifacts-*/*"
+    },
+    {
+      "Sid": "ReadSpApiSecretsForOps",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-2:<PROD-ACCOUNT-ID>:secret:sp-api/sincerely-services/*"
+    },
+    {
       "Sid": "PassDeploymentRoleToCloudFormation",
       "Effect": "Allow",
       "Action": "iam:PassRole",
