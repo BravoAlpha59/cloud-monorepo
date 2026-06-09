@@ -1,6 +1,6 @@
 # Amazon platform — production bring-up runbook
 
-**Status:** active · **Owner:** AWS (`cloud-monorepo`) · **Account:** `sincerelyhers` prod (`637445353164`)
+**Status:** active · **Owner:** AWS (`cloud-monorepo`) · **Account:** `sincerelyhers` prod (`<PROD-ACCOUNT-ID>`)
 
 The prod account is greenfield for the Amazon SP-API platform — Secrets Manager is
 empty under `sp-api/*`, and neither `sincerelyhers-base-prod` nor
@@ -26,7 +26,7 @@ stand up the whole prod Amazon foundation; the feed relay rides Phases 3–5.
 
 ## Phase 0 — Prep
 
-- `.identifiers.local` present locally with `PROD_ACCOUNT_ID=637445353164` (+ app
+- `.identifiers.local` present locally with `PROD_ACCOUNT_ID=<PROD-ACCOUNT-ID>` (+ app
   identifiers). `make` prod targets refuse to run without it.
 - Stage prod secret material under the gitignored `secrets/` directory:
 
@@ -92,7 +92,7 @@ prod sellers):
 ```
 AWS_PROFILE=sincerelyhers-prod uv run python scripts/sp_api_notifications.py \
     create-destination prod-sp-api-feed-ready \
-    arn:aws:sqs:us-east-2:637445353164:prod-sp-api-feed-ready
+    arn:aws:sqs:us-east-2:<PROD-ACCOUNT-ID>:prod-sp-api-feed-ready
 AWS_PROFILE=sincerelyhers-prod uv run python scripts/sp_api_notifications.py \
     create-subscription KK  <destination-id> FEED_PROCESSING_FINISHED
 AWS_PROFILE=sincerelyhers-prod uv run python scripts/sp_api_notifications.py \
