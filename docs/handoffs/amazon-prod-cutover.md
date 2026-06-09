@@ -46,10 +46,16 @@ stand up the whole prod Amazon foundation; the feed relay rides Phases 3–5.
 source .identifiers.local && make deploy-base-prod
 ```
 
-Creates the prod reports S3 bucket + SES sender identity. The SES identity triggers a
-verification email to `rarrington@sincerelyhers.com` — click it. SES *production-access*
-(out of the sandbox) is a separate reports-feature concern and does **not** block the feed
-relay, which sends no email.
+Creates the prod reports S3 bucket, the SES sender identity, and the
+`sincerelyhers-deploy-artifacts-prod` bucket that Phases 2–3 upload to. The SES identity
+triggers a verification email to `rarrington@sincerelyhers.com` — click it. SES
+*production-access* (out of the sandbox) is a separate reports-feature concern and does
+**not** block the feed relay, which sends no email.
+
+> Deploys use `--s3-bucket sincerelyhers-deploy-artifacts-prod` (created above by
+> `DeploymentRole`), **not** `--resolve-s3` — the latter bootstraps a bucket as the human
+> SSO identity, which is intentionally not permitted to manage S3 in locked-down prod. So
+> base must deploy before the credential/platform stacks.
 
 ## Phase 2 — SP-API credential bootstrap · **[operator]**
 

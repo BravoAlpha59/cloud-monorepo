@@ -49,6 +49,32 @@ Resources:
     Properties:
       EmailIdentity: !Ref SesSenderEmail
 
+  # SAM deployment artifacts (Lambda zips + packaged templates). Created here
+  # by DeploymentRole so platform/rotation deploys reference it via
+  # `--s3-bucket` instead of `--resolve-s3` — the latter bootstraps a bucket
+  # as the human SSO identity, which is intentionally not permitted to manage
+  # S3 in locked-down prod. Artifacts are ephemeral, so expire them.
+  DeploymentArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "sincerelyhers-deploy-artifacts-${Environment}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
 Outputs:
   ReportsBucketArn:
     Description: ARN of the cross-platform reports bucket.
@@ -70,3 +96,8 @@ Outputs:
     Value: !Sub "arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesSenderEmail}"
     Export:
       Name: !Sub "${AWS::StackName}-SesSenderIdentityArn"
+  DeploymentArtifactsBucketName:
+    Description: Name of the SAM deployment-artifacts bucket (use with `sam deploy --s3-bucket`).
+    Value: !Ref DeploymentArtifactsBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-DeploymentArtifactsBucketName"
