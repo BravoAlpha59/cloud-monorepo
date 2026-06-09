@@ -16,8 +16,7 @@ deploy-base-dev:
 		--profile sincerelyhers-dev \
 		--region us-east-2 \
 		--parameter-overrides Environment=dev \
-		--capabilities CAPABILITY_IAM \
-		--resolve-s3
+		--capabilities CAPABILITY_IAM
 
 deploy-base-prod:
 	@test -n "$$PROD_ACCOUNT_ID" || (echo "ERROR: PROD_ACCOUNT_ID not set. 'source .identifiers.local' (or export it manually) and retry." && exit 1)
@@ -34,8 +33,7 @@ deploy-base-prod:
 		--role-arn arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole \
 		--region us-east-2 \
 		--parameter-overrides Environment=prod \
-		--capabilities CAPABILITY_IAM \
-		--resolve-s3
+		--capabilities CAPABILITY_IAM
 
 # ---- Amazon platform stack ----
 build-amazon:
@@ -67,9 +65,14 @@ deploy-amazon-prod: build-amazon
 		--profile sincerelyhers-prod \
 		--role-arn arn:aws:iam::$$PROD_ACCOUNT_ID:role/DeploymentRole \
 		--region us-east-2 \
-		--parameter-overrides Environment=prod BaseStackName=sincerelyhers-base-prod \
+		--parameter-overrides \
+			Environment=prod BaseStackName=sincerelyhers-base-prod \
+			"KKWebhookJson=$$(tr -d '\n\r' < secrets/amazon-feed-kk.json)" \
+			"LLGWebhookJson=$$(tr -d '\n\r' < secrets/amazon-feed-llg.json)" \
+			"COWebhookJson=$$(tr -d '\n\r' < secrets/amazon-feed-co.json)" \
 		--capabilities CAPABILITY_NAMED_IAM \
-		--resolve-s3
+		--s3-bucket sincerelyhers-deploy-artifacts-prod \
+		--s3-prefix amazon
 
 # Prod SP-API credential bootstrap (app + per-seller refresh tokens).
 # No build step — pure CloudFormation. Deployed rarely; see
@@ -99,8 +102,7 @@ deploy-amazon-secrets-prod:
 			"AppCredentialsJson=$$(tr -d '\n\r' < secrets/app-credentials.json)" \
 			"KKCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-kk.json)" \
 			"LLGCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-llg.json)" \
-			"COCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-co.json)" \
-		--resolve-s3
+			"COCredentialsJson=$$(tr -d '\n\r' < secrets/credentials-co.json)"
 
 test-amazon:
 	uv run pytest platforms/amazon/tests/ -v
@@ -152,4 +154,5 @@ deploy-rotation-services-prod: build-rotation
 		--region us-east-2 \
 		--parameter-overrides Environment=prod AppShortName=services SecretsPrefix=sp-api/sincerely-services BaseStackName=sincerelyhers-base-prod \
 		--capabilities CAPABILITY_NAMED_IAM \
-		--resolve-s3
+		--s3-bucket sincerelyhers-deploy-artifacts-prod \
+		--s3-prefix rotation-services
