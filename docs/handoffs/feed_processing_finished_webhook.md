@@ -155,18 +155,37 @@ require the queue ARN.
 
 #### Prod path
 
-Same three pieces, but the `ProtectProductionSecrets` SCP blocks Step 3's direct CLI
-write — only `DeploymentRole` can write `sp-api/*` secrets in prod. Workarounds:
+Same three pieces, but the `ProtectProductionSecrets` SCP blocks the Dev-path Step 3
+direct CLI write — only `DeploymentRole` can write `sp-api/*` secrets in prod. So in
+prod the secrets are **CloudFormation-managed** instead: the deploy itself (running as
+`DeploymentRole`) is what writes them.
 
-- Steps 1 + 4 are unchanged (use `make deploy-amazon-prod` and the prod queue ARN /
-  `sincerelyhers-prod` SSO profile).
-- Step 3 in prod: declare each secret as an `AWS::SecretsManager::Secret` resource in
-  `platforms/amazon/template.yaml` with `SecretString` interpolating a SAM parameter
-  marked `NoEcho: true`. Pass values via
-  `sam deploy --role-arn arn:aws:iam::<PROD>:role/DeploymentRole --parameter-overrides
-  "KKWebhookJson=$(cat secrets/amazon-feed-kk.json)" ...`. The deploy itself satisfies
-  the SCP (DeploymentRole is the principal); `NoEcho` keeps the values out of
-  `describe-stacks` / `describe-stack-events`.
+This is already wired up — no manual `aws secretsmanager` calls in prod:
+
+1. **Deploy + secrets in one step.** `template.yaml` declares three
+   `AWS::SecretsManager::Secret` resources (`KKWebhookSecret` / `LLGWebhookSecret` /
+   `COWebhookSecret`), each gated on `Condition: IsProd`, `DeletionPolicy: Retain`, named
+   `${SecretsPrefix}/{alias}/webhooks/amazon-feed`, with `SecretString` fed from a
+   `NoEcho` parameter. `make deploy-amazon-prod` reads `secrets/amazon-feed-{kk,llg,co}.json`
+   and passes them as those parameters (and refuses to run if any of the three files is
+   missing). `NoEcho` keeps the values out of `describe-stacks` / `describe-stack-events`.
+2. **Secrets are re-supplied on every prod deploy** (the chosen lifecycle): keep the three
+   `secrets/*.json` files staged locally — gitignored — for as long as the prod stack is
+   maintained. CloudFormation no-ops when a value is unchanged, so routine redeploys are
+   idempotent; to **rotate** a secret, edit the file and redeploy. `Retain` means a stack
+   teardown never deletes a live secret.
+3. **Steps 1 + 4 of the Dev path otherwise apply** — `make deploy-amazon-prod` (prompts to
+   confirm, assumes `DeploymentRole`, needs `PROD_ACCOUNT_ID` from `.identifiers.local`),
+   then the SP-API `create-destination` / `create-subscription` calls against the **prod**
+   queue ARN on the `sincerelyhers-prod` SSO profile.
+
+Two prod prerequisites that differ from dev:
+
+- **Per-seller refresh tokens must already exist in prod Secrets Manager**
+  (`sp-api/sincerely-services/{KK,LLG,CO}/credentials`) — `create-subscription`
+  authenticates *as each seller*, so those sellers must be onboarded to prod first.
+- **Each `secrets/amazon-feed-*.json` `url` must be the prod Odoo host** (not a tunnel),
+  and the matching Odoo `webhook.endpoint` must have its secret set, or it 401s every POST.
 
 ## Testing
 

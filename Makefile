@@ -53,6 +53,7 @@ deploy-amazon-dev: build-amazon
 
 deploy-amazon-prod: build-amazon
 	@test -n "$$PROD_ACCOUNT_ID" || (echo "ERROR: PROD_ACCOUNT_ID not set. 'source .identifiers.local' (or export it manually) and retry." && exit 1)
+	@for a in kk llg co; do test -f secrets/amazon-feed-$$a.json || (echo "ERROR: secrets/amazon-feed-$$a.json missing. Prod webhook secrets are CloudFormation-managed and re-supplied on every prod deploy; stage all three files before deploying." && exit 1); done
 	@echo ""
 	@echo "WARNING: About to deploy to PROD (account $$PROD_ACCOUNT_ID)."
 	@echo "  Stack:   sincerelyhers-amazon-prod"
