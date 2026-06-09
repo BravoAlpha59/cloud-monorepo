@@ -48,6 +48,22 @@ Two secret paths under `sp-api/{app-prefix}/`:
 
 The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`. App prefixes in use today: `sp-api/sincerely-services/` (live), `sp-api/bobnathan-test/` (sandbox for rotation smoke testing — only `app/credentials` populated).
 
+### Odoo-webhook secrets (notification relay pattern)
+
+For SP-API notifications relayed to Odoo webhooks (first instance: `FEED_PROCESSING_FINISHED` → `amazon_feed_status`), each seller has one secret per notification domain:
+
+- **Secret name**: `sp-api/{app-prefix}/{seller-alias}/webhooks/{webhook-code}` — e.g. `sp-api/sincerely-services/KK/webhooks/amazon-feed`.
+- **Shape**: `{secret, url, seller_id}` — HMAC key, Odoo endpoint URL, and the Amazon merchant ID for sellerId → alias dispatch at the relay Lambda.
+- **`{webhook-code}`** mirrors the Odoo `webhook.endpoint` code (handler-key prefix, minus the trailing seller alias). The Odoo URL path component is `{webhook-code}-{alias-lower}`.
+
+**Local staging file convention** (operator workflow, never committed):
+
+- Each secret has a corresponding JSON file under `secrets/` (gitignored): `secrets/{webhook-code}-{alias-lower}.json` — e.g. `secrets/amazon-feed-kk.json`.
+- The file name matches the Odoo URL path component exactly, so the file → URL → secret mapping is unambiguous when staging values for `aws secretsmanager create-secret --secret-string file://...`.
+- The operator deletes the file after the secret is created.
+
+This pattern generalizes to other notification types (order changes, listing changes, pricing, etc.) without renaming or migrating existing secrets — each new domain gets its own `webhooks/{webhook-code}` leaf under the same per-seller prefix.
+
 ## Credential rotation pipeline
 
 A second SAM stack ([`rotation-template.yaml`](rotation-template.yaml)) deploys per-app rotation infrastructure: two SQS queues + DLQs (expiry, new-secret), a DynamoDB rotation-events table, and four Lambdas (`ExpiryHandler`, `RotationRequester`, `CredentialRotationProcessor`, `OldSecretMonitor`). Deployed once per SPP app via `make deploy-rotation-services-dev` and `make deploy-rotation-bobnathan-dev`. Design rationale, decision history, and smoke-test plan in [docs/design/credential-rotation.md](../../docs/design/credential-rotation.md). D3 currently policy C (alert-only); operator triggers rotation by `aws lambda invoke` of `RotationRequester`. D6 verify-then-write enforced in `CredentialRotationProcessor`; D7 daily monitoring via `OldSecretMonitor`.
