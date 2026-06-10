@@ -1,6 +1,7 @@
 # Integration contract: Amazon `FEED_PROCESSING_FINISHED` → `webhook_sh`
 
-**Status:** active · **Owners:** Odoo (`amazon_sh`) + AWS relay (`myAWS` distro) ·
+**Status:** active — AWS relay live in prod for KK/LLG/CO since 2026-06-09 ·
+**Owners:** Odoo (`amazon_sh`) + AWS relay (`myAWS` distro) ·
 **Canonical copy:** this file; mirror into the `myAWS` repo.
 
 This is the shared source of truth for the seam between two projects. Amazon delivers
@@ -176,9 +177,9 @@ secret values flow through one JSON-safe deploy path), **not** in the platform s
 3. **Then** the SP-API `create-destination` / `create-subscription` calls against the
    **prod** queue ARN on the `sincerelyhers-prod` SSO profile.
 
-See [`amazon-prod-cutover.md`](amazon-prod-cutover.md) for the full sequenced runbook
-(including the one-time permission-set update that lets the operator read secrets and
-upload Lambda artifacts in locked-down prod).
+See [platforms/amazon/CLAUDE.md → Production deployment](../../platforms/amazon/CLAUDE.md#production-deployment)
+for the deploy gotchas and the one-time permission-set update that lets the operator read
+secrets and upload Lambda artifacts in locked-down prod.
 
 Two prod prerequisites that differ from dev:
 
