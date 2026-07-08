@@ -52,10 +52,14 @@ In **dev** these credential secrets are created directly via the CLI. In **prod*
 
 ### Odoo-webhook secrets (notification relay pattern)
 
-For SP-API notifications relayed to Odoo webhooks (first instance: `FEED_PROCESSING_FINISHED` → `amazon_feed_status`), each seller has one secret per notification domain:
+For SP-API notifications relayed to Odoo webhooks, each seller has one secret per notification
+domain. Two instances exist today: `FEED_PROCESSING_FINISHED` → `amazon_feed_status` (webhook-code
+`amazon-feed`, live in prod) and `DATA_KIOSK_QUERY_PROCESSING_FINISHED` → `amazon_datakiosk_status`
+(webhook-code `amazon-datakiosk`, verified end-to-end in dev 2026-07-06; see
+[docs/handoffs/datakiosk_query_finished_webhook.md](../../docs/handoffs/datakiosk_query_finished_webhook.md)).
 
 - **Secret name**: `sp-api/{app-prefix}/{seller-alias}/webhooks/{webhook-code}` — e.g. `sp-api/sincerely-services/KK/webhooks/amazon-feed`.
-- **Shape**: `{secret, url, seller_id}` — HMAC key, Odoo endpoint URL, and the Amazon merchant ID for sellerId → alias dispatch at the relay Lambda.
+- **Shape**: `{secret, url, <dispatch-id>}` — HMAC key, Odoo endpoint URL, and the Amazon id the relay dispatches on to find the alias. The dispatch field differs by domain: feed carries `seller_id` (from `payload…sellerId`); Data Kiosk carries `account_id`, the **full** merchant customer id `amzn1.merchant.o.<merchantToken>` (from `payload.accountId`) — not the bare merchant token, and not necessarily equal to `sellerId`.
 - **`{webhook-code}`** mirrors the Odoo `webhook.endpoint` code (handler-key prefix, minus the trailing seller alias). The Odoo URL path component is `{webhook-code}-{alias-lower}`.
 
 **Local staging file convention** (operator workflow, never committed):

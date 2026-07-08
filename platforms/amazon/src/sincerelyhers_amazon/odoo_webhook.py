@@ -2,13 +2,15 @@
 
 Each Odoo webhook endpoint has its own per-seller secret at
 ``{SECRETS_PREFIX}/{seller_alias}/webhooks/{webhook_code}`` shaped
-``{secret, url, seller_id}``:
+``{secret, url, <dispatch_id>}``:
 
 * ``secret``  — HMAC-SHA256 key, source of truth is the Odoo
   ``webhook.endpoint.secret`` field.
 * ``url``     — full https URL the relay POSTs to.
-* ``seller_id`` — Amazon merchant ID; used at the relay Lambda to
-  dispatch by ``payload.*.sellerId`` to the matching alias.
+* ``seller_id`` / ``account_id`` — the Amazon id the relay Lambda
+  dispatches on to find the matching alias. Feed notifications carry
+  ``sellerId`` (``seller_id``); Data Kiosk notifications carry
+  ``accountId`` (``account_id``). See ``build_dispatch_map``.
 
 The signature is computed over the **exact bytes** of the SQS message
 body that came in — never over a re-serialized form. Re-serializing
@@ -48,20 +50,25 @@ def _load_endpoint_cached(seller_alias: str, webhook_code: str) -> dict:
     return json.loads(raw)
 
 
-def build_seller_id_to_alias_map(
-    seller_aliases: list[str], webhook_code: str
+def build_dispatch_map(
+    seller_aliases: list[str], webhook_code: str, id_field: str = "seller_id"
 ) -> dict[str, str]:
-    """Return ``{amazon_seller_id: internal_alias}`` for the given aliases.
+    """Return ``{amazon_id: internal_alias}`` for the given aliases.
 
     Called once at Lambda cold start. Reads each alias's webhook secret to
-    pull out the ``seller_id`` field — that's the canonical place to keep
-    the alias ↔ Amazon-merchant-ID mapping (avoids embedding seller IDs
-    in code or in the SAM template).
+    pull out its *id_field* — that's the canonical place to keep the alias ↔
+    Amazon-id mapping (avoids embedding ids in code or in the SAM template).
+
+    *id_field* selects which secret field a notification dispatches on:
+    ``seller_id`` for the feed relay (``FEED_PROCESSING_FINISHED`` carries
+    ``sellerId``) and ``account_id`` for the Data Kiosk relay
+    (``DATA_KIOSK_QUERY_PROCESSING_FINISHED`` carries ``accountId``, the
+    merchant customer id, which may differ from ``sellerId``).
     """
     mapping: dict[str, str] = {}
     for alias in seller_aliases:
         endpoint = load_endpoint(alias, webhook_code)
-        mapping[endpoint["seller_id"]] = alias
+        mapping[endpoint[id_field]] = alias
     return mapping
 
 

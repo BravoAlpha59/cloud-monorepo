@@ -35,6 +35,15 @@ Parameters:
       sp-api/sincerely-services/{alias}/webhooks/amazon-feed shaped
       {secret, url, seller_id}. Adding an alias here without the
       corresponding secret will fail the relay at first invocation.
+  DataKioskSellerAliases:
+    Type: CommaDelimitedList
+    Default: 73J,CO,KK,LLG,OH,SH
+    Description: >
+      Sellers whose DATA_KIOSK_QUERY_PROCESSING_FINISHED notifications
+      relay to Odoo. Each alias must have a secret at
+      sp-api/sincerely-services/{alias}/webhooks/amazon-datakiosk shaped
+      {secret, url, account_id}. Adding an alias here without the
+      corresponding secret will fail the relay at first invocation.
 
 Globals:
   Function:
@@ -121,6 +130,38 @@ Resources:
               AWS: "arn:aws:iam::437568002678:root"
             Action: sqs:SendMessage
             Resource: !GetAtt FeedReadyQueue.Arn
+
+  DataKioskReadyDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-datakiosk-ready-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+      SqsManagedSseEnabled: true
+
+  DataKioskReadyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${Environment}-sp-api-datakiosk-ready"
+      VisibilityTimeout: 90  # must exceed DataKioskRelay Timeout
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DataKioskReadyDLQ.Arn
+        maxReceiveCount: 3
+
+  DataKioskReadyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref DataKioskReadyQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSPAPINotifications
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::437568002678:root"
+            Action: sqs:SendMessage
+            Resource: !GetAtt DataKioskReadyQueue.Arn
 
   # ---- IAM: ReportRequester ----
   ReportRequesterExecutionRole:
@@ -261,6 +302,49 @@ Resources:
                   StringEquals:
                     cloudwatch:namespace: SincerelyHers/AmazonRelay
 
+  # ---- IAM: DataKioskRelay ----
+  DataKioskRelayExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${Environment}-DataKioskRelayRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsPrefix}/*"
+        - PolicyName: SqsConsume
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt DataKioskReadyQueue.Arn
+        - PolicyName: CloudWatchMetrics
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: SincerelyHers/AmazonRelay
+
   # ---- Lambda: ReportRequester ----
   ReportRequesterFunction:
     Type: AWS::Serverless::Function
@@ -318,6 +402,26 @@ Resources:
           Type: SQS
           Properties:
             Queue: !GetAtt FeedReadyQueue.Arn
+            BatchSize: 1
+
+  # ---- Lambda: DataKioskRelay ----
+  DataKioskRelayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${Environment}-DataKioskRelay"
+      CodeUri: src/
+      Handler: handlers.datakiosk_relay.lambda_handler
+      Role: !GetAtt DataKioskRelayExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          SECRETS_PREFIX: !Ref SecretsPrefix
+          WEBHOOK_SELLER_ALIASES: !Join [",", !Ref DataKioskSellerAliases]
+      Events:
+        DataKioskReady:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt DataKioskReadyQueue.Arn
             BatchSize: 1
 
   # ---- EventBridge ----
@@ -502,3 +606,12 @@ Outputs:
   FeedReadyDLQArn:
     Description: ARN of the DLQ for sp-api-feed-ready.
     Value: !GetAtt FeedReadyDLQ.Arn
+  DataKioskRelayFunctionArn:
+    Description: ARN of the DataKioskRelay Lambda
+    Value: !GetAtt DataKioskRelayFunction.Arn
+  DataKioskReadyQueueArn:
+    Description: ARN of the sp-api-datakiosk-ready queue (subscribe SP-API DATA_KIOSK_QUERY_PROCESSING_FINISHED notifications here).
+    Value: !GetAtt DataKioskReadyQueue.Arn
+  DataKioskReadyDLQArn:
+    Description: ARN of the DLQ for sp-api-datakiosk-ready.
+    Value: !GetAtt DataKioskReadyDLQ.Arn
