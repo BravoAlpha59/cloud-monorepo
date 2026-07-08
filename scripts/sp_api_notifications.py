@@ -144,6 +144,38 @@ def create_subscription(args) -> None:
     )
 
 
+def delete_subscription(args) -> None:
+    """Delete a seller's subscription for one notification type.
+
+    SP-API permits only one subscription per (seller x notificationType), so
+    re-pointing a subscription to a different destination means delete then
+    re-create. The subscriptionId is looked up from the live subscription
+    unless supplied explicitly.
+    """
+    token = _seller_access_token(args.seller_alias)
+    sub_id = args.subscription_id
+    if not sub_id:
+        current = _sp_api(
+            "GET", f"/notifications/v1/subscriptions/{args.notification_type}", token
+        )
+        if current.status_code >= 400:
+            _emit(current)
+            return
+        sub_id = current.json().get("payload", {}).get("subscriptionId")
+        if not sub_id:
+            print(
+                f"No {args.notification_type} subscription found for {args.seller_alias}."
+            )
+            sys.exit(1)
+    _emit(
+        _sp_api(
+            "DELETE",
+            f"/notifications/v1/subscriptions/{args.notification_type}/{sub_id}",
+            token,
+        )
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="SP-API Notifications bootstrap")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -185,6 +217,19 @@ def main() -> int:
     p.add_argument("destination_id")
     p.add_argument("notification_type", nargs="?", default="REPORT_PROCESSING_FINISHED")
     p.set_defaults(func=create_subscription)
+
+    p = sub.add_parser(
+        "delete-subscription",
+        help="Delete a seller's subscription for one notification type.",
+    )
+    p.add_argument("seller_alias")
+    p.add_argument("notification_type", nargs="?", default="REPORT_PROCESSING_FINISHED")
+    p.add_argument(
+        "--subscription-id",
+        default=None,
+        help="Explicit subscriptionId; if omitted, looked up from the live subscription.",
+    )
+    p.set_defaults(func=delete_subscription)
 
     args = parser.parse_args()
     args.func(args)
