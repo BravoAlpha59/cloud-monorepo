@@ -55,7 +55,7 @@ In **dev** these credential secrets are created directly via the CLI. In **prod*
 For SP-API notifications relayed to Odoo webhooks, each seller has one secret per notification
 domain. Two instances exist today: `FEED_PROCESSING_FINISHED` → `amazon_feed_status` (webhook-code
 `amazon-feed`, live in prod) and `DATA_KIOSK_QUERY_PROCESSING_FINISHED` → `amazon_datakiosk_status`
-(webhook-code `amazon-datakiosk`, verified end-to-end in dev 2026-07-06; see
+(webhook-code `amazon-datakiosk`, live in prod 2026-07-08 for all six sellers; see
 [docs/handoffs/datakiosk_query_finished_webhook.md](../../docs/handoffs/datakiosk_query_finished_webhook.md)).
 
 - **Secret name**: `sp-api/{app-prefix}/{seller-alias}/webhooks/{webhook-code}` — e.g. `sp-api/sincerely-services/KK/webhooks/amazon-feed`.
