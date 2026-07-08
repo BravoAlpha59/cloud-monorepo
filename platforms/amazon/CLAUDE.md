@@ -35,7 +35,7 @@ These are final. Do not re-open them.
 - **App name**: Sincerely Services
 - **Client ID (LWA)**: `<LWA-CLIENT-ID>` — literal value lives in `.identifiers.local` (gitignored) and in each per-seller secret in Secrets Manager; never embedded in code or config.
 - **Marketplace ID**: `ATVPDKIKX0DER` (US).
-- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev with all six rules currently `DISABLED` (SH/KK post-shake-out per commit 8f2a059; LLG/73J/OH/CO post-3-day-trial 2026-05-04, with trial S3 + DDB data deleted). Re-enable when prod cutover begins.
+- **Sellers**: six total, each identified internally by a short alias used as the path segment in secret names and S3 keys. All six (`SH`, `KK`, `LLG`, `73J`, `OH`, `CO`) are onboarded to dev with all six **report** EventBridge rules currently `DISABLED` (SH/KK post-shake-out per commit 8f2a059; LLG/73J/OH/CO post-3-day-trial 2026-05-04, with trial S3 + DDB data deleted). These rules drive the reports feature, which has not been cut over to prod; they are independent of the `FEED_PROCESSING_FINISHED` relay that went live in prod 2026-06-09 (see [Production deployment](#production-deployment)).
 - **Refresh tokens**: one per seller, stored in Secrets Manager (see naming below). Sincerely Hers's refresh token is the first one onboarded.
 - **Credentials rule**: never hardcoded. All SP-API and AWS credentials come from Secrets Manager at runtime.
 
@@ -48,14 +48,18 @@ Two secret paths under `sp-api/{app-prefix}/`:
 
 The Lambda runtime reads both and merges before handing to `python-amazon-sp-api`. See `src/sincerelyhers_amazon/credentials.py`. App prefixes in use today: `sp-api/sincerely-services/` (live), `sp-api/bobnathan-test/` (sandbox for rotation smoke testing — only `app/credentials` populated).
 
-In **dev** these credential secrets are created directly via the CLI. In **prod** the `ProtectProductionSecrets` SCP forbids CLI writes, so `app/credentials` + per-seller `credentials` are bootstrapped from a `DeploymentRole` deploy of [`secrets-template.yaml`](secrets-template.yaml) (`make deploy-amazon-secrets-prod`), a deliberately separate, rarely-deployed stack. Full prod sequence: [docs/handoffs/amazon-prod-cutover.md](../../docs/handoffs/amazon-prod-cutover.md).
+In **dev** these credential secrets are created directly via the CLI. In **prod** the `ProtectProductionSecrets` SCP forbids CLI writes, so `app/credentials` + per-seller `credentials` are bootstrapped from a `DeploymentRole` deploy of [`secrets-template.yaml`](secrets-template.yaml) (`make deploy-amazon-secrets-prod`), a deliberately separate, rarely-deployed stack. Full prod deploy sequence and gotchas: [Production deployment](#production-deployment) below.
 
 ### Odoo-webhook secrets (notification relay pattern)
 
-For SP-API notifications relayed to Odoo webhooks (first instance: `FEED_PROCESSING_FINISHED` → `amazon_feed_status`), each seller has one secret per notification domain:
+For SP-API notifications relayed to Odoo webhooks, each seller has one secret per notification
+domain. Two instances exist today: `FEED_PROCESSING_FINISHED` → `amazon_feed_status` (webhook-code
+`amazon-feed`, live in prod) and `DATA_KIOSK_QUERY_PROCESSING_FINISHED` → `amazon_datakiosk_status`
+(webhook-code `amazon-datakiosk`, verified end-to-end in dev 2026-07-06; see
+[docs/handoffs/datakiosk_query_finished_webhook.md](../../docs/handoffs/datakiosk_query_finished_webhook.md)).
 
 - **Secret name**: `sp-api/{app-prefix}/{seller-alias}/webhooks/{webhook-code}` — e.g. `sp-api/sincerely-services/KK/webhooks/amazon-feed`.
-- **Shape**: `{secret, url, seller_id}` — HMAC key, Odoo endpoint URL, and the Amazon merchant ID for sellerId → alias dispatch at the relay Lambda.
+- **Shape**: `{secret, url, <dispatch-id>}` — HMAC key, Odoo endpoint URL, and the Amazon id the relay dispatches on to find the alias. The dispatch field differs by domain: feed carries `seller_id` (from `payload…sellerId`); Data Kiosk carries `account_id`, the **full** merchant customer id `amzn1.merchant.o.<merchantToken>` (from `payload.accountId`) — not the bare merchant token, and not necessarily equal to `sellerId`.
 - **`{webhook-code}`** mirrors the Odoo `webhook.endpoint` code (handler-key prefix, minus the trailing seller alias). The Odoo URL path component is `{webhook-code}-{alias-lower}`.
 
 **Local staging file convention** (operator workflow, never committed):
@@ -70,13 +74,55 @@ This pattern generalizes to other notification types (order changes, listing cha
 
 A second SAM stack ([`rotation-template.yaml`](rotation-template.yaml)) deploys per-app rotation infrastructure: two SQS queues + DLQs (expiry, new-secret), a DynamoDB rotation-events table, and four Lambdas (`ExpiryHandler`, `RotationRequester`, `CredentialRotationProcessor`, `OldSecretMonitor`). Deployed once per SPP app via `make deploy-rotation-services-dev` and `make deploy-rotation-bobnathan-dev`. Design rationale, decision history, and smoke-test plan in [docs/design/credential-rotation.md](../../docs/design/credential-rotation.md). D3 currently policy C (alert-only); operator triggers rotation by `aws lambda invoke` of `RotationRequester`. D6 verify-then-write enforced in `CredentialRotationProcessor`; D7 daily monitoring via `OldSecretMonitor`.
 
+## Production deployment
+
+The prod Amazon foundation is **live as of 2026-06-09**: the base stack
+(`sincerelyhers-base-prod`), the secrets stack (`sincerelyhers-amazon-secrets-prod` — all
+seven `sp-api/sincerely-services/*` secrets) and the platform stack
+(`sincerelyhers-amazon-prod`) are deployed, and the `FEED_PROCESSING_FINISHED` → Odoo relay
+is serving KK/LLG/CO (end-to-end verified, one real feed per seller relayed HTTP 200, DLQ
+clean). The report EventBridge rules stay `DISABLED` — the reports feature is a separate prod
+cutover, not yet done.
+
+**Deploy order** (the platform stack imports base exports; subscriptions authenticate as each
+seller and so need the credential secrets present): base → (secrets + platform, either order)
+→ SP-API subscriptions → verify. Deploy from `main`.
+
+**Two prod-only deploy gotchas** — both are why the prod `make` targets differ from their
+`-dev` counterparts (locked-down prod; neither bites in dev):
+
+- **`sam deploy` corrupts JSON secret values.** samcli's `--parameter-overrides` parser
+  truncates a JSON value like `{"a":"b"}` to `{`. The secrets stack therefore deploys via
+  `aws cloudformation deploy --parameter-overrides file://…`, with the params file built by
+  [`scripts/build_cfn_params.py`](../../scripts/build_cfn_params.py) (validates each staged
+  file is JSON, re-emits compact). This is also why *every* secret value — webhook configs
+  included — flows through the secrets stack, never the platform stack.
+- **`--resolve-s3` can't be used in prod.** It bootstraps an artifact bucket as the human SSO
+  identity, which `DeveloperAccess` is intentionally not allowed to do in locked-down prod (no
+  `s3:PutBucketPublicAccessBlock` / `s3:DeleteBucket`). Instead the base stack creates
+  `sincerelyhers-deploy-artifacts-prod` via `DeploymentRole`, and prod deploys pass
+  `--s3-bucket sincerelyhers-deploy-artifacts-prod`. So base must deploy before the others.
+
+**Operator permission-set additions** (one-time, applied to the `DeveloperAccess` permission
+set from the management account): `s3:PutObject` on `sincerelyhers-deploy-artifacts-*` (Lambda
+artifact upload) and `secretsmanager:GetSecretValue` on `sp-api/sincerely-services/*` (verify
+secrets, run the subscription script). See
+[`permission-set-developer-access.json`](../../infrastructure/org-setup/permission-set-developer-access.json).
+
+**Rotation-drift caveat:** once the prod credential-rotation pipeline is live (the D1 SCP
+carve-out per [credential-rotation.md](../../docs/design/credential-rotation.md)), the
+`CredentialRotationProcessorRole` owns the *value* of `app/credentials`. Do not redeploy the
+secrets stack thereafter without passing the **current** `app/credentials` value (or drop
+`AppCredentials` from that stack), or the deploy clobbers the rotated secret. Per-seller
+refresh tokens are not API-rotatable, so they carry no such hazard.
+
 ## First Milestone
 
 **Complete (2026-04-21).** EventBridge cron → `ReportRequester` Lambda → SP-API `createReport` → DynamoDB (`REQUESTED`); then SP-API `REPORT_PROCESSING_FINISHED` → SQS (`sp-api-report-ready`, DLQ 3× redrive) → `ReportProcessor` Lambda → SP-API `getReportDocument` + download + gunzip → S3 (`sincerelyhers-reports-dev/amazon/sincerely-services/SH/.../{reportId}.tsv`) → DynamoDB `COMPLETED` → SES email with 12-hour pre-signed URL. Full round-trip verified against dev in 33–39 seconds end-to-end.
 
 Out of scope for this milestone and still pending:
 
-- Prod base and platform stacks (dev exercised first).
+- Reports-feature prod cutover. The base + platform stacks are now deployed to prod (2026-06-09 — see [Production deployment](#production-deployment)), but the report EventBridge rule ships `DISABLED` and no prod `REPORT_PROCESSING_FINISHED` subscriptions exist, so the reports round-trip has not been exercised in prod.
 - Graduate pre-signed URL expiry from 12 h to 7 days (needs CloudFront signed URLs or long-lived IAM user creds — not a Lambda-role thing).
 - Domain-identity SES + production-access request before prod cutover.
 

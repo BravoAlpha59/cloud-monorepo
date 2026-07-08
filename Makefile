@@ -79,7 +79,9 @@ deploy-amazon-prod: build-amazon
 deploy-amazon-secrets-prod:
 	@test -n "$$PROD_ACCOUNT_ID" || (echo "ERROR: PROD_ACCOUNT_ID not set. 'source .identifiers.local' (or export it manually) and retry." && exit 1)
 	@test -f secrets/app-credentials.json || (echo "ERROR: secrets/app-credentials.json missing — stage {client_id, client_secret} before deploying." && exit 1)
-	@for a in kk llg co; do test -f secrets/credentials-$$a.json || (echo "ERROR: secrets/credentials-$$a.json missing — stage {refresh_token} before deploying." && exit 1); test -f secrets/amazon-feed-$$a.json || (echo "ERROR: secrets/amazon-feed-$$a.json missing — stage {secret, url, seller_id} before deploying." && exit 1); done
+	@for a in kk llg co 73j oh sh; do test -f secrets/credentials-$$a.json || (echo "ERROR: secrets/credentials-$$a.json missing — stage {refresh_token} before deploying." && exit 1); done
+	@for a in kk llg co; do test -f secrets/amazon-feed-$$a.json || (echo "ERROR: secrets/amazon-feed-$$a.json missing — stage {secret, url, seller_id} before deploying." && exit 1); done
+	@for a in kk llg co 73j oh sh; do test -f secrets/amazon-datakiosk-$$a.json || (echo "ERROR: secrets/amazon-datakiosk-$$a.json missing — stage {secret, url, account_id} before deploying." && exit 1); done
 	@echo ""
 	@echo "WARNING: About to deploy SP-API secrets to PROD (account $$PROD_ACCOUNT_ID)."
 	@echo "  Stack:   sincerelyhers-amazon-secrets-prod"
@@ -99,6 +101,15 @@ deploy-amazon-secrets-prod:
 		KKWebhookJson=@secrets/amazon-feed-kk.json \
 		LLGWebhookJson=@secrets/amazon-feed-llg.json \
 		COWebhookJson=@secrets/amazon-feed-co.json \
+		73JCredentialsJson=@secrets/credentials-73j.json \
+		OHCredentialsJson=@secrets/credentials-oh.json \
+		SHCredentialsJson=@secrets/credentials-sh.json \
+		KKDataKioskJson=@secrets/amazon-datakiosk-kk.json \
+		LLGDataKioskJson=@secrets/amazon-datakiosk-llg.json \
+		CODataKioskJson=@secrets/amazon-datakiosk-co.json \
+		73JDataKioskJson=@secrets/amazon-datakiosk-73j.json \
+		OHDataKioskJson=@secrets/amazon-datakiosk-oh.json \
+		SHDataKioskJson=@secrets/amazon-datakiosk-sh.json \
 		> secrets/.cfn-params-secrets.json
 	aws cloudformation deploy --template-file platforms/amazon/secrets-template.yaml \
 		--stack-name sincerelyhers-amazon-secrets-prod \

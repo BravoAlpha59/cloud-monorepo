@@ -229,11 +229,11 @@ def test_422_raises(aws_webhooks, mocker):
 
 
 def test_seller_id_map_built_from_all_aliases(aws_webhooks):
-    """build_seller_id_to_alias_map should resolve every configured alias."""
+    """build_dispatch_map should resolve every configured alias."""
     from sincerelyhers_amazon import odoo_webhook
 
-    mapping = odoo_webhook.build_seller_id_to_alias_map(
-        ["KK", "LLG", "CO"], WEBHOOK_CODE
+    mapping = odoo_webhook.build_dispatch_map(
+        ["KK", "LLG", "CO"], WEBHOOK_CODE, id_field="seller_id"
     )
 
     assert mapping == {
