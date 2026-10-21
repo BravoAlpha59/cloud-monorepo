@@ -1,6 +1,6 @@
 ---
 name: onboard-amazon-seller
-description: Onboard a new Amazon seller alias to dev. Generates the EventBridge schedule rule + Lambda invoke permission in platforms/amazon/template.yaml, creates the smoke-test event payload, walks through the external SPP authorization + Secrets Manager + SP-API subscription steps, deploys, and verifies against deployed reality. Use when the user says "onboard <alias>", "add Amazon seller", or names one of the pending aliases (LLG, 73J, OH, CO).
+description: Onboard a new Amazon seller alias to dev. Generates the EventBridge schedule rule + Lambda invoke permission in platforms/amazon/template.yaml, creates the smoke-test event payload, walks through the external SPP authorization + Secrets Manager + SP-API subscription steps, deploys, and verifies against deployed reality. Use when the user says "onboard <alias>" or "add Amazon seller".
 ---
 
 # Onboard Amazon Seller
