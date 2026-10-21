@@ -7,6 +7,7 @@ This platform has its own SAM template at [platforms/amazon/template.yaml](templ
 **Visual references** (mermaid diagrams that render on GitHub):
 - [docs/architecture/02-amazon-runtime.md](../../docs/architecture/02-amazon-runtime.md) — runtime sequence + resource topology
 - [docs/architecture/04-secrets-and-auth.md](../../docs/architecture/04-secrets-and-auth.md) — per-seller secret layout + LWA token-exchange flow
+- [docs/architecture/05-state-map.md](../../docs/architecture/05-state-map.md) — whole-system state map (all pipelines, base, governance, roadmap) colored by deployment status
 
 ## Overview
 
