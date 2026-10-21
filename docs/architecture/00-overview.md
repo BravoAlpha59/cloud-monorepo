@@ -10,6 +10,7 @@ Living architecture documentation for the cloud-monorepo. Each page covers one s
 | [02](02-amazon-runtime.md) | Amazon platform runtime flow | How a scheduled SP-API report goes from EventBridge cron to email-delivered S3 link |
 | [03](03-iac-topology.md) | IaC topology | Two-level stack pattern, base ↔ platform exports/imports, sam deploy + DeploymentRole flow |
 | [04](04-secrets-and-auth.md) | Secrets and auth | Per-seller secret layout, Lambda execution-role scoping, runtime LWA token exchange |
+| [05](05-state-map.md) | System state map | Wide shot of all five pipelines, shared base, governance, and pending roadmap — colored by deployment status |
 
 ## Deferred decisions / future direction
 
