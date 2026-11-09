@@ -5,8 +5,11 @@ token before calling secretsmanager:PutSecretValue on app/credentials.
 Verification failure -> the message goes back to SQS, eventually the DLQ;
 the existing app/credentials is preserved.
 
-Notification envelope (per SP-API Notifications spec; exact payload
-schema TBD until first observed live in Layer 2 smoke test):
+Notification envelope. The payload path and its three fields were confirmed
+by a live rotation of BobNathan-Test on 2026-11-09 (the real message parsed
+and completed). The notificationType string and any extra envelope fields
+were not recorded then; every message now logs its field names and
+notificationType, and ROTATION_COMPLETED rows store them:
 
     {
       "notificationVersion": "1.0",
@@ -23,8 +26,8 @@ schema TBD until first observed live in Layer 2 smoke test):
       "notificationMetadata": { "applicationId": "...", ... }
     }
 
-Once the real payload is observed against BobNathan-Test, replace the
-provisional schema above and update this handler accordingly.
+A message that doesn't match this shape is recorded by field names only
+and left to redrive to the DLQ, where the secret stays recoverable.
 """
 
 import json
@@ -59,6 +62,20 @@ def lambda_handler(event: dict, context: object) -> None:
         old_expires_at = payload.get("oldClientSecretExpiryTime", "unknown")
         application_id = meta.get("applicationId", "unknown")
         notification_id = meta.get("notificationId", "unknown")
+
+        # Record the real envelope's shape on every message: key names only,
+        # plus the envelope's type/version strings, which carry no secret.
+        shape_text = json.dumps(rotation.field_names(body), sort_keys=True)
+        notification_type = str(body.get("notificationType", "unknown"))
+        logger.info(
+            "New-secret notification message_id=%s notificationType=%s "
+            "notificationVersion=%s payloadVersion=%s field_names=%s",
+            record.get("messageId", "unknown"),
+            notification_type,
+            body.get("notificationVersion", "unknown"),
+            body.get("payloadVersion", "unknown"),
+            shape_text,
+        )
 
         # D6: verify the new secret BEFORE persisting it. If verification
         # raises, the SQS message goes back unprocessed; SQS will redrive
@@ -110,6 +127,8 @@ def lambda_handler(event: dict, context: object) -> None:
                 "client_id": client_id,
                 "old_secret_expires_at": old_expires_at,
                 "notification_id": notification_id,
+                "notification_type": notification_type,
+                "field_names": shape_text[:4000],
             },
         )
 

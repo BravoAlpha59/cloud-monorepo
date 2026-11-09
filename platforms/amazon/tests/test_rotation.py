@@ -198,7 +198,7 @@ def test_requester_non_204_raises_and_records_failure(aws_rotation, mocker):
 
 
 def test_processor_verifies_then_writes_secret_and_records_completion(
-    aws_rotation, mocker
+    aws_rotation, mocker, caplog
 ):
     """Happy path: new secret exchanges for an LWA token, gets persisted,
     and a ROTATION_COMPLETED row is written to DynamoDB."""
@@ -209,8 +209,11 @@ def test_processor_verifies_then_writes_secret_and_records_completion(
         return_value="verified-access-token",
     )
 
-    lambda_handler(_new_secret_sqs_event(), None)
+    with caplog.at_level("INFO"):
+        lambda_handler(_new_secret_sqs_event(), None)
 
+    assert "notificationType=APPLICATION_OAUTH_CLIENT_NEW_SECRET" in caplog.text
+    assert NEW_CLIENT_SECRET not in caplog.text
     grantless.assert_called_once()
     # Critical: verification used the NEW secret, not the existing one
     assert grantless.call_args.kwargs["client_secret"] == NEW_CLIENT_SECRET
@@ -228,6 +231,9 @@ def test_processor_verifies_then_writes_secret_and_records_completion(
     rows = _scan_events()
     assert len(rows) == 1
     assert rows[0]["event_type"] == "ROTATION_COMPLETED"
+    assert rows[0]["notification_type"] == "APPLICATION_OAUTH_CLIENT_NEW_SECRET"
+    assert '"newClientSecret": null' in rows[0]["field_names"]
+    assert NEW_CLIENT_SECRET not in json.dumps(rows[0])
 
 
 def test_processor_verification_failure_preserves_old_secret(aws_rotation, mocker):
