@@ -97,6 +97,9 @@ Resources:
     Properties:
       QueueName: !Sub "${Environment}-sp-api-${AppShortName}-secret-expiry"
       VisibilityTimeout: 300  # 5 min — must exceed ExpiryHandler Timeout
+      # Match the DLQ: a standard queue's redriven message keeps its original
+      # enqueue time, so DLQ retention is capped by this queue's retention.
+      MessageRetentionPeriod: 1209600  # 14 days
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ExpiryDLQ.Arn
@@ -114,7 +117,9 @@ Resources:
             Effect: Allow
             Principal:
               AWS: "arn:aws:iam::437568002678:root"
-            Action: sqs:SendMessage
+            Action:
+              - sqs:SendMessage
+              - sqs:GetQueueAttributes
             Resource: !GetAtt ExpiryQueue.Arn
 
   # ---- SQS: new-secret queue ----
@@ -130,6 +135,9 @@ Resources:
     Properties:
       QueueName: !Sub "${Environment}-sp-api-${AppShortName}-new-secret"
       VisibilityTimeout: 300
+      # Match the DLQ: a standard queue's redriven message keeps its original
+      # enqueue time, so DLQ retention is capped by this queue's retention.
+      MessageRetentionPeriod: 1209600  # 14 days
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt NewSecretDLQ.Arn
@@ -147,7 +155,9 @@ Resources:
             Effect: Allow
             Principal:
               AWS: "arn:aws:iam::437568002678:root"
-            Action: sqs:SendMessage
+            Action:
+              - sqs:SendMessage
+              - sqs:GetQueueAttributes
             Resource: !GetAtt NewSecretQueue.Arn
 
   # ---- IAM: ExpiryHandler ----

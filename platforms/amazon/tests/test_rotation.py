@@ -260,6 +260,115 @@ def test_processor_verification_failure_preserves_old_secret(aws_rotation, mocke
     assert any(r["event_type"] == "ROTATION_VERIFICATION_FAILED" for r in rows)
 
 
+UNEXPECTED_SECRET = "secret-under-an-unexpected-field-name"
+
+
+def _unexpected_shape_sqs_event() -> dict:
+    """A plausible real payload whose field names differ from our guess."""
+    body = {
+        "notificationVersion": "1.0",
+        "notificationType": "APPLICATION_OAUTH_CLIENT_NEW_SECRET",
+        "payloadVersion": "1.0",
+        "eventTime": "2026-11-19T10:00:00Z",
+        "payload": {
+            "applicationOAuthClientNewSecret": {
+                "clientId": APP_CREDS["client_id"],
+                "clientSecret": UNEXPECTED_SECRET,
+                "oldClientSecretExpiryTime": "2026-11-26T10:00:00Z",
+            }
+        },
+        "notificationMetadata": {
+            "applicationId": "amzn1.sp.app.test",
+            "notificationId": "test-notif-id-3",
+        },
+    }
+    return {"Records": [{"messageId": "m-shape", "body": json.dumps(body)}]}
+
+
+def test_processor_unexpected_shape_raises_and_logs_field_names_only(
+    aws_rotation, mocker, caplog
+):
+    """Cycle-1 safety net: the real payload schema is unverified. A message
+    that doesn't match must raise (so SQS redrives it to the DLQ, keeping the
+    secret recoverable), leave app/credentials untouched, and record only the
+    field names — never a value — in logs, DynamoDB and the alert."""
+    from handlers.credential_rotation_processor import (
+        NewSecretParseError,
+        lambda_handler,
+    )
+
+    grantless = mocker.patch(
+        "handlers.credential_rotation_processor.rotation.grantless_access_token"
+    )
+    alert = mocker.patch("handlers.credential_rotation_processor.rotation.send_alert")
+
+    with caplog.at_level("ERROR"), pytest.raises(NewSecretParseError):
+        lambda_handler(_unexpected_shape_sqs_event(), None)
+
+    grantless.assert_not_called()
+
+    sm = boto3.client("secretsmanager", region_name=REGION)
+    persisted = json.loads(
+        sm.get_secret_value(SecretId=f"{SECRETS_PREFIX}/app/credentials")[
+            "SecretString"
+        ]
+    )
+    assert persisted == APP_CREDS  # unchanged
+
+    rows = _scan_events()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["event_type"] == "NEW_SECRET_PARSE_FAILED"
+    assert row["message_id"] == "m-shape"
+    assert "newClientSecret" in row["error"]
+    assert '"clientSecret": null' in row["field_names"]
+
+    alert_text = json.dumps(alert.call_args.kwargs)
+    for text in (caplog.text, json.dumps(row), alert_text):
+        assert UNEXPECTED_SECRET not in text
+        assert APP_CREDS["client_id"] not in text
+        assert "clientSecret" in text
+
+
+def test_processor_non_json_body_raises_parse_error(aws_rotation, mocker):
+    from handlers.credential_rotation_processor import (
+        NewSecretParseError,
+        lambda_handler,
+    )
+
+    mocker.patch("handlers.credential_rotation_processor.rotation.send_alert")
+    event = {"Records": [{"messageId": "m-bad", "body": "not json"}]}
+
+    with pytest.raises(NewSecretParseError):
+        lambda_handler(event, None)
+
+    rows = _scan_events()
+    assert rows[0]["event_type"] == "NEW_SECRET_PARSE_FAILED"
+    assert rows[0]["field_names"] == "null"
+
+
+def test_field_names_drops_every_value():
+    from sincerelyhers_amazon import rotation
+
+    shape = rotation.field_names(
+        {"a": "secret", "b": {"c": 1, "d": [{"e": "x"}]}, "f": [], "g": ["y"]}
+    )
+    assert shape == {
+        "a": None,
+        "b": {"c": None, "d": [{"e": None}]},
+        "f": [],
+        "g": [None],
+    }
+
+
+def test_rotate_scope_matches_amazon_docs():
+    """Amazon's "Connect to the SP-API" lists this scope for the Application
+    Management API. `:rotate` (the earlier value) is not a valid scope."""
+    from sincerelyhers_amazon import rotation
+
+    assert rotation.ROTATE_SCOPE == "sellingpartnerapi::client_credential:rotation"
+
+
 # ---------- OldSecretMonitor (D7) ----------
 
 

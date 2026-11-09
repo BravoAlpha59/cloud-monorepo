@@ -2,7 +2,7 @@
 
 Manually invoked (D3 policy C) — `aws lambda invoke` with empty payload.
 Reads app/credentials, exchanges for an LWA grantless token with the
-``client_credential:rotate`` scope, calls the SP-API rotation endpoint
+``client_credential:rotation`` scope, calls the SP-API rotation endpoint
 (expects HTTP 204), records the request in DynamoDB, and emits an SES
 alert. The new secret arrives asynchronously on the new-secret SQS queue
 and is processed by CredentialRotationProcessor.
