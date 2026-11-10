@@ -7,6 +7,7 @@ This platform has its own SAM template at [platforms/amazon/template.yaml](templ
 **Visual references** (mermaid diagrams that render on GitHub):
 - [docs/architecture/02-amazon-runtime.md](../../docs/architecture/02-amazon-runtime.md) — runtime sequence + resource topology
 - [docs/architecture/04-secrets-and-auth.md](../../docs/architecture/04-secrets-and-auth.md) — per-seller secret layout + LWA token-exchange flow
+- [docs/architecture/05-state-map.md](../../docs/architecture/05-state-map.md) — whole-system state map (all pipelines, base, governance, roadmap) colored by deployment status
 
 ## Overview
 
@@ -115,6 +116,12 @@ carve-out per [credential-rotation.md](../../docs/design/credential-rotation.md)
 secrets stack thereafter without passing the **current** `app/credentials` value (or drop
 `AppCredentials` from that stack), or the deploy clobbers the rotated secret. Per-seller
 refresh tokens are not API-rotatable, so they carry no such hazard.
+
+## Status & pending work
+
+- **`DATA_KIOSK_QUERY_PROCESSING_FINISHED` → Odoo relay is live in prod (completed 2026-07-08).** Second instance of the notification-relay pattern (Data Kiosk SKU Economics). Prod: platform stack (`prod-DataKioskRelay` + `prod-sp-api-datakiosk-ready` queue/DLQ, ESM enabled) deployed; nine new secrets created via `DeploymentRole` (six `sp-api/sincerely-services/{alias}/webhooks/amazon-datakiosk` + `73J/OH/SH` per-seller `credentials`); prod SP-API destination `cb91dc51-286a-48fe-b943-7c902dfa5ad2` created and all six `DATA_KIOSK_QUERY_PROCESSING_FINISHED` subscriptions **re-pointed** from the dev queue to it; verified end-to-end — real SH query-finished notification (`queryId 935126020642`) relayed HTTP 200 to `https://sh-3.sincerelyapps.com/webhook/amazon-datakiosk-sh`, DLQ clean. Dispatch is on `payload.accountId` (`amzn1.merchant.o.<merchantToken>`), **not** the feed relay's `sellerId`. Contract: [docs/handoffs/datakiosk_query_finished_webhook.md](../../docs/handoffs/datakiosk_query_finished_webhook.md).
+  - **Re-point gotcha:** dev and prod share one SPP app, so notification subscriptions are app-global with one per (seller × type); cutover meant `delete-subscription` then `create-subscription` per seller (dev datakiosk delivery stopped as a result). `scripts/sp_api_notifications.py` gained a `delete-subscription` command for this. The pending **reports** prod cutover will hit the same wall (dev holds all six `REPORT_PROCESSING_FINISHED` subs). Dev verification was 2026-07-06 (OH/SH relayed HTTP 200 via a Tailscale funnel).
+- **Extend the feed relay to SH/73J/OH — scoped, not started (2026-07-08).** Feed relay is live in prod for KK/LLG/CO only; extending to the other three is purely additive (no re-point, no new credentials, reuses feed destination `6172efe4`). **Gated** on confirming Odoo `amazon_feed_status` tolerates all feed types (`FEED_PROCESSING_FINISHED` can't be filtered by type). Full scope + work items: [docs/handoffs/feed_relay_extend_sh_73j_oh.md](../../docs/handoffs/feed_relay_extend_sh_73j_oh.md).
 
 ## First Milestone
 
