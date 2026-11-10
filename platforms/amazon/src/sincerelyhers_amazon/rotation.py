@@ -33,7 +33,7 @@ logger.setLevel(logging.INFO)
 LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
 SP_API_ENDPOINT = "https://sellingpartnerapi-na.amazon.com"
 
-ROTATE_SCOPE = "sellingpartnerapi::client_credential:rotate"
+ROTATE_SCOPE = "sellingpartnerapi::client_credential:rotation"
 ROTATE_PATH = "/applications/2023-11-30/clientSecret"
 
 
@@ -138,6 +138,21 @@ def send_alert(*, subject: str, body: str) -> Optional[str]:
     except Exception:
         logger.exception("SES alert failed: %s", subject)
         return None
+
+
+def field_names(value: object) -> object:
+    """Return the key structure of a parsed JSON value with every value dropped.
+
+    Dicts map each key to the structure beneath it (``None`` for a scalar);
+    a list is represented by the structure of its first element. Used to log
+    the shape of a notification we failed to parse without ever logging a
+    value — a new-secret message carries the client_secret.
+    """
+    if isinstance(value, dict):
+        return {key: field_names(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [field_names(value[0])] if value else []
+    return None
 
 
 def _recipient_list() -> list[str]:

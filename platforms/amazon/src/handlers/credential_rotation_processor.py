@@ -5,8 +5,11 @@ token before calling secretsmanager:PutSecretValue on app/credentials.
 Verification failure -> the message goes back to SQS, eventually the DLQ;
 the existing app/credentials is preserved.
 
-Notification envelope (per SP-API Notifications spec; exact payload
-schema TBD until first observed live in Layer 2 smoke test):
+Notification envelope. The payload path and its three fields were confirmed
+by a live rotation of BobNathan-Test on 2026-11-09 (the real message parsed
+and completed). The notificationType string and any extra envelope fields
+were not recorded then; every message now logs its field names and
+notificationType, and ROTATION_COMPLETED rows store them:
 
     {
       "notificationVersion": "1.0",
@@ -23,13 +26,14 @@ schema TBD until first observed live in Layer 2 smoke test):
       "notificationMetadata": { "applicationId": "...", ... }
     }
 
-Once the real payload is observed against BobNathan-Test, replace the
-provisional schema above and update this handler accordingly.
+A message that doesn't match this shape is recorded by field names only
+and left to redrive to the DLQ, where the secret stays recoverable.
 """
 
 import json
 import logging
 import os
+from typing import NoReturn
 
 import boto3
 
@@ -40,17 +44,38 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+class NewSecretParseError(Exception):
+    """The notification did not match the expected new-secret shape."""
+
+
 def lambda_handler(event: dict, context: object) -> None:
     for record in event["Records"]:
-        body = json.loads(record["body"])
-        payload = body["payload"]["applicationOAuthClientNewSecret"]
-        meta = body.get("notificationMetadata", {})
+        try:
+            body = json.loads(record["body"])
+            payload = body["payload"]["applicationOAuthClientNewSecret"]
+            meta = body.get("notificationMetadata", {})
+            client_id = payload["clientId"]
+            new_client_secret = payload["newClientSecret"]
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            _handle_parse_failure(record, exc)
 
-        client_id = payload["clientId"]
-        new_client_secret = payload["newClientSecret"]
         old_expires_at = payload.get("oldClientSecretExpiryTime", "unknown")
         application_id = meta.get("applicationId", "unknown")
         notification_id = meta.get("notificationId", "unknown")
+
+        # Record the real envelope's shape on every message: key names only,
+        # plus the envelope's type/version strings, which carry no secret.
+        shape_text = json.dumps(rotation.field_names(body), sort_keys=True)
+        notification_type = str(body.get("notificationType", "unknown"))
+        logger.info(
+            "New-secret notification message_id=%s notificationType=%s "
+            "notificationVersion=%s payloadVersion=%s field_names=%s",
+            record.get("messageId", "unknown"),
+            notification_type,
+            body.get("notificationVersion", "unknown"),
+            body.get("payloadVersion", "unknown"),
+            shape_text,
+        )
 
         # D6: verify the new secret BEFORE persisting it. If verification
         # raises, the SQS message goes back unprocessed; SQS will redrive
@@ -102,6 +127,8 @@ def lambda_handler(event: dict, context: object) -> None:
                 "client_id": client_id,
                 "old_secret_expires_at": old_expires_at,
                 "notification_id": notification_id,
+                "notification_type": notification_type,
+                "field_names": shape_text[:4000],
             },
         )
 
@@ -124,3 +151,52 @@ def lambda_handler(event: dict, context: object) -> None:
             client_id,
             old_expires_at,
         )
+
+
+def _handle_parse_failure(record: dict, exc: Exception) -> NoReturn:
+    """Record an unparseable notification, then raise so SQS redrives it to the DLQ.
+
+    The message body may hold the new client_secret under a field name we did
+    not expect, so nothing here logs, stores, or emails a value: only the
+    body's key structure and the exception type (plus the missing key name
+    for a KeyError). The message itself stays recoverable in the DLQ.
+    """
+    try:
+        shape = rotation.field_names(json.loads(record["body"]))
+    except ValueError, KeyError, TypeError:
+        shape = None
+    detail = type(exc).__name__
+    if isinstance(exc, KeyError):
+        detail += f" (missing key {exc.args[0]!r})"
+    message_id = record.get("messageId", "unknown")
+    shape_text = json.dumps(shape, sort_keys=True)
+
+    logger.error(
+        "Unparseable new-secret notification message_id=%s error=%s field_names=%s",
+        message_id,
+        detail,
+        shape_text,
+    )
+    rotation.write_event(
+        event_type="NEW_SECRET_PARSE_FAILED",
+        extra={
+            "message_id": message_id,
+            "error": detail,
+            "field_names": shape_text[:4000],
+        },
+    )
+    app = os.environ["APP_SHORT_NAME"]
+    rotation.send_alert(
+        subject=f"[{app}] New-secret notification could not be parsed — kept for DLQ",
+        body=(
+            f"App:          {app}\n"
+            f"Message ID:   {message_id}\n"
+            f"Error:        {detail}\n"
+            f"Field names:  {shape_text}\n\n"
+            "The message did not match the expected new-secret shape. Nothing\n"
+            "was written to Secrets Manager. SQS will redrive it and then move\n"
+            "it to the new-secret DLQ, where the new client_secret is still\n"
+            "recoverable. Update the handler to the field names above.\n"
+        ),
+    )
+    raise NewSecretParseError(f"message_id={message_id}: {detail}") from None
