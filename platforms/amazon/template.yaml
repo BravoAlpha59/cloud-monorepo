@@ -28,7 +28,7 @@ Parameters:
       here must already be verified in SES.
   WebhookSellerAliases:
     Type: CommaDelimitedList
-    Default: KK,LLG,CO
+    Default: KK,LLG,CO,SH,73J,OH
     Description: >
       Sellers whose FEED_PROCESSING_FINISHED notifications relay to
       Odoo. Each alias must have a secret at
