@@ -112,9 +112,11 @@ secrets, run the subscription script). See
 
 **Rotation-drift caveat:** once the prod credential-rotation pipeline is live (the D1 SCP
 carve-out per [credential-rotation.md](../../docs/design/credential-rotation.md)), the
-`CredentialRotationProcessorRole` owns the *value* of `app/credentials`. Do not redeploy the
-secrets stack thereafter without passing the **current** `app/credentials` value (or drop
-`AppCredentials` from that stack), or the deploy clobbers the rotated secret. Per-seller
+`CredentialRotationProcessorRole` owns the *value* of `app/credentials`. Since 2026-11-11
+`make deploy-amazon-secrets-prod` is **partial**: it passes only the `secrets/*.json` files
+that are staged, and every other parameter keeps its current stack value. So a deploy leaves
+`app/credentials` alone unless `secrets/app-credentials.json` is staged, and the target warns
+loudly when it is. Never stage a stale copy of it, or the deploy clobbers the rotated secret. Per-seller
 refresh tokens are not API-rotatable, so they carry no such hazard.
 
 ## Status & pending work

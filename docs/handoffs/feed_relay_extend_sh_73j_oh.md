@@ -1,7 +1,23 @@
 # Extend `FEED_PROCESSING_FINISHED` → Odoo relay to SH, 73J, OH
 
-**Status: SCOPED, not started (2026-07-08).** Gated on one Odoo-side confirmation
-(see below). Decision to build was deferred — "save this and come back to it."
+**Status: IN PROGRESS (2026-11-11).** Approved by the user. The gate is cleared: Odoo
+confirmed `amazon_feed_status` returns 2xx for feeds it doesn't own, whatever their type
+(agent-mail thread `2026-11-10-amazon-sh-notifications`, 002). Tracks 1–2 code is on
+branch `feat/feed-relay-sh-73j-oh`; deploys and subscriptions pending.
+
+**Re-verified 2026-11-11:** SH/73J/OH still have no `FEED_PROCESSING_FINISHED`
+subscription; KK/LLG/CO still point at `6172efe4`; prod has `amazon-feed` secrets for
+KK/LLG/CO only; `prod-FeedRelay` runs with `WEBHOOK_SELLER_ALIASES=KK,LLG,CO`. Dev has no
+`amazon-feed` secrets at all, so the template default change doesn't affect dev in practice.
+
+The "SH caveat" below is resolved: the external integration was the user's own idle
+April `OrderChangesQueue` setup, and SH's report schedules were cancelled on 2026-11-10.
+
+**`make deploy-amazon-secrets-prod` is now partial** (changed on this branch): it passes
+only the `secrets/*.json` files that are staged and keeps every other parameter's current
+value. So track 1 needs only `secrets/amazon-feed-{sh,73j,oh}.json` staged. It doesn't
+need all 16 files, and it doesn't touch `app/credentials` unless
+`secrets/app-credentials.json` is staged.
 
 ## Goal & rationale
 
@@ -58,7 +74,7 @@ entirely Odoo-side tolerance.
 
 | Track | Work |
 |---|---|
-| **1 — Secrets** | Add three `amazon-feed` webhook secret resources (SH/73J/OH) to [`platforms/amazon/secrets-template.yaml`](../../platforms/amazon/secrets-template.yaml): 3 `NoEcho` params + 3 `AWS::SecretsManager::Secret` (`…/{ALIAS}/webhooks/amazon-feed`, shape `{secret, url, seller_id}`), mirroring the KK/LLG/CO feed block. Extend the `deploy-amazon-secrets-prod` target in the [`Makefile`](../../Makefile): add SH/73J/OH to the `amazon-feed` file-existence loop and add three `…WebhookJson=@secrets/amazon-feed-{alias}.json` args to the `build_cfn_params.py` call. Stage `secrets/amazon-feed-{sh,73j,oh}.json` (operator supplies prod Odoo URL, HMAC secret, and `seller_id` = the seller's bare merchant token from `secrets/sellers.md`). Deploy via `make deploy-amazon-secrets-prod` (`DeploymentRole`). Note the `73J` logical-ID leading-digit is fine (validate-template accepts it; datakiosk used the same). |
+| **1 — Secrets** | Add three `amazon-feed` webhook secret resources (SH/73J/OH) to [`platforms/amazon/secrets-template.yaml`](../../platforms/amazon/secrets-template.yaml): 3 `NoEcho` params + 3 `AWS::SecretsManager::Secret` (`…/{ALIAS}/webhooks/amazon-feed`, shape `{secret, url, seller_id}`), mirroring the KK/LLG/CO feed block. In the [`Makefile`](../../Makefile), `SECRETS_PROD_PARAMS` maps `amazon-feed-{sh,73j,oh}` to the three new parameters (done on this branch; the target is now partial, see Status). Stage `secrets/amazon-feed-{sh,73j,oh}.json` (operator supplies prod Odoo URL, HMAC secret, and `seller_id` = the seller's bare merchant token from `secrets/sellers.md`). Deploy via `make deploy-amazon-secrets-prod` (`DeploymentRole`). Note the `73J` logical-ID leading-digit is fine (validate-template accepts it; datakiosk used the same). |
 | **2 — Platform stack** | Bump `WebhookSellerAliases` `Default` in [`platforms/amazon/template.yaml`](../../platforms/amazon/template.yaml) from `KK,LLG,CO` to all six. Deploy `make deploy-amazon-prod` (from `main`; container build needs `qemu-aarch64` binfmt registered — `docker run --privileged --rm tonistiigi/binfmt --install all` if the build hangs). |
 | **3 — Subscriptions** | `uv run python scripts/sp_api_notifications.py create-subscription <alias> 6172efe4-92f7-4ba8-af38-a9d9932f3eea FEED_PROCESSING_FINISHED` for SH, 73J, OH (with `AWS_PROFILE=sincerelyhers-prod AWS_REGION=us-east-2`). **Pure creates** against the existing destination — no `delete-subscription`. |
 | **4 — Odoo (sh-3)** | Register `amazon-feed-{sh,73j,oh}` webhook endpoint records + matching HMAC secrets on prod Odoo (`amazon_sh` module upgrade — seed-data records, not UI-editable), else POSTs return `404 Unknown endpoint`. |
