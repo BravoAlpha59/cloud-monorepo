@@ -1,9 +1,20 @@
 # Extend `FEED_PROCESSING_FINISHED` → Odoo relay to SH, 73J, OH
 
-**Status: IN PROGRESS (2026-11-11).** Approved by the user. The gate is cleared: Odoo
-confirmed `amazon_feed_status` returns 2xx for feeds it doesn't own, whatever their type
-(agent-mail thread `2026-11-10-amazon-sh-notifications`, 002). Tracks 1–2 code is on
-branch `feat/feed-relay-sh-73j-oh` (PR #18). **Done 2026-11-11:** secrets deployed (`seller_id`s cross-checked against each seller's Data Kiosk merchant token) and `prod-FeedRelay` running with all six aliases (a canary invoke built the six-secret map). **Pending:** subscriptions (track 3) and verification.
+**Status: DONE (2026-11-17).** All six sellers' `FEED_PROCESSING_FINISHED` subscriptions point at
+prod destination `6172efe4`, and `prod-FeedRelay` runs with `KK,LLG,CO,SH,73J,OH`.
+
+- **2026-11-11:** PR #18 merged; three `amazon-feed` secrets deployed via the (now partial)
+  `make deploy-amazon-secrets-prod`, with each `seller_id` cross-checked against that seller's
+  Data Kiosk merchant token; relay aliases set by a CloudFormation change set (see track 2: a
+  template `Default` change doesn't reach an existing stack); a canary invoke built the
+  six-secret map; subscriptions created for SH (`521b75a4…`), 73J (`e380655f…`) and OH
+  (`7965a1ab…`).
+- **Verification (step 4) closed as "no traffic expected"** (user, 2026-11-17). Odoo submits
+  feeds (the JSON listings feed) only for sellers with an FBM stock location: CO, KK and LLG.
+  SH, 73J and OH have none, so their subscriptions stay silent. In the first 24 h, KK, LLG and
+  CO relayed 30 feeds with HTTP 200, with no warnings and the DLQ empty. If SH, 73J or OH ever
+  gain an FBM location, they relay with no further change.
+- Odoo keeps its `getFeed` poll until its proxy-replacement cleanup phase.
 
 **Re-verified 2026-11-11:** SH/73J/OH still have no `FEED_PROCESSING_FINISHED`
 subscription; KK/LLG/CO still point at `6172efe4`; prod has `amazon-feed` secrets for
